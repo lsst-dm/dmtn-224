@@ -1,0 +1,9 @@
+% bibentry template for lsst.bib in https://github.com/lsst/lsst-texmf/blob/main/texmf/bibtex/bib/lsst.bib
+
+@DocuShare{DMTN-224,
+   author = { Russ Allbery },
+    title = {RSP identity management implementation strategy},
+     year = 2022,
+    month = Mar,
+   handle = {DMTN-224},
+      url = {https://dmtn-224.lsst.io } }
