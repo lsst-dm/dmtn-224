@@ -34,17 +34,22 @@ authors:
 # doi: 10.5281/zenodo.#####
 
 # Copyright statement
-copyright: "2022, Association of Universities for Research in Astronomy, Inc. (AURA)"
+copyright: >
+  2022, Association of Universities for Research in Astronomy, Inc. (AURA)
 
 # Description. A short, 1-2 sentence statemement used by document indices.
-description: "The identity management system for the Rubin Science Platform registers and authenticates users, maintains their group membership and other associated permissions such as quotas, and answers authorization questions from other Science Platform services. This document describes the implementation strategy and choices for the identity management system."
+description: >
+  Describes the implementation strategy and choices for the identity
+  management, authentication, and authorization system of the Rebin Science
+  Platform.
 
 # Abstract, if available
-# abstract: >
-#           Write your paragraph
-#           here with multiple lines.
-#
-#           You can have multiple paragraphs too.
+abstract: >
+  The identity management system for the Rubin Science Platform registers and
+  authenticates users, maintains their group membership and other associated
+  permissions such as quotas, and answers authorization questions from other
+  Science Platform services. This document describes the implementation
+  strategy and choices for the identity management system.
 
 # URL where this document is published by Read the Docs. e.g. http://sqr-001.lsst.codes
 url: "https://dmtn-224.lsst.io"
