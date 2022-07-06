@@ -30,7 +30,7 @@ The implementation of the Science Platform allows configuration of the source of
 
 For deployments using InCommon, the Science Platform uses CILogon_ to authenticate the user via their choice of federated identity provider.
 
-.. _CILogin: https://www.cilogon.org/
+.. _CILogon: https://www.cilogon.org/
 
 All deployments of the Science Platform use NGINX_ via ingress-nginx_ as the ingress for all access to Science Platform components that require authentication.
 The ingress invokes Gafaelfawr_ as an auth request handler to validate all requests that require authentication.
@@ -56,7 +56,7 @@ With CILogon, COmanage is used, as described below.
 
 See DMTN-225_ for more details on the metadata stored for each user, and its sources.
 
-.. _comanage:
+.. _comanage-auth:
 
 COmanage
 --------
@@ -203,7 +203,7 @@ When using CILogon, there is an additional level of indirection.
 Because CILogon supports federated identity, it does not itself guarantee unique usernames or necessarily map an authenticated user to a username.
 Instead, CILogon provides a unique identity URI (for example, ``http://cilogon.org/serverA/users/31388556``).
 
-The mapping of that identity to a username is handled in :ref:`COmanage <comanage>`.
+The mapping of that identity to a username is handled in :ref:`COmanage <comanage-auth>`.
 That information is exposed to the Science Platform via LDAP.
 To determine the username of a newly-authenticated user, the Science Platform therefore does an LDAP lookup for a record with a ``voPersonSoRID`` matching the CILogon identity URI in the ``sub`` claim of the JWT.
 The ``uid`` attribute is the username for Science Platform purposes.
@@ -351,7 +351,7 @@ DMTN-225_
 .. _SQR-049: https://sqr-049.lsst.io/
 .. _SQR-051: https://sqr-051.lsst.io/
 .. _DMTN-163: https://dmtn-163.lsst.io/
-.. _DTMN-225: https://dmtn-225.lsst.io/
+.. _DMTN-225: https://dmtn-225.lsst.io/
 
 Vendor evaluations
 ------------------
