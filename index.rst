@@ -9,12 +9,12 @@ The identity management system for the Vera C. Rubin Science Platform registers 
 This document describes the implementation strategy and choices for the identity management system.
 
 Described here is an implementation of the design tentatively put forward in SQR-039_ and subsequently revised, and is intended to partially fulfill the requirements laid out in SQR-044_.
-References to requirements of the form **IDM-NNNN** are references to SQR-039_.
+References to requirements of the form **IDM-NNNN** are references to SQR-044_.
 Most of the implementation of the identity management system is contained in the Gafaelfawr_ project.
 
 .. _Gafaelfawr: https://gafaelfawr.lsst.io/
 
-See :ref:`references` for a list of other tech notes that outline the history of the design process for the Rubin Science Platform identity management system and go into more detail on specific portions of the overall system.
+See :ref:`References <references>` for a list of other tech notes that outline the history of the design process for the Rubin Science Platform identity management system and go into more detail on specific portions of the overall system.
 
 This document does not discuss the NCSA deployments of the Science Platform, which vary from the implementation designed below in a few ways.
 Those deployments are scheduled to be decommissioned, so only those configuration differences that will still be present in other Science Platform deployments are discussed here.
@@ -281,7 +281,6 @@ Remaining work
 
 The following portions of the described implementation are not yet complete.
 
-- Map CILogon identity URIs to usernames via COmanage
 - Force two-factor authentication for administrators (IDM-0007)
 - Force reauthentication to provide an affiliation (IDM-0009)
 - Changing usernames (IDM-0012)
@@ -325,7 +324,7 @@ Design
 
 SQR-039_
     Problem statement and proposed redesign for the identity management system.
-    This document contains a detailed discussion of the decision not to use abbr:`JWTs (JSON Web Tokens)` in the authentication system, and to keep authorization information such as group credentials out of the authentication tokens.
+    This document contains a detailed discussion of the decision not to use :abbr:`JWTs (JSON Web Tokens)` in the authentication system, and to keep authorization information such as group credentials out of the authentication tokens.
 
     This is currently the operative design document for the identity management system, although portions of this document are obsolete.
     It will be replaced with a revised design document in the future.
