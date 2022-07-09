@@ -339,7 +339,7 @@ SQR-049_
 SQR-051_
     Discussion of credential leaks from the authentication system to backend services, and possible fixes and mitigations.
 
-DMTN-163_
+DMTN-193_
     General discussion of web security for the Science Platform, which among other topics suggests additional design considerations for the Science Platform ingress, authentication layer, and authorization layer.
 
 DMTN-225_
@@ -349,7 +349,7 @@ DMTN-225_
 .. _SQR-044: https://sqr-044.lsst.io/
 .. _SQR-049: https://sqr-049.lsst.io/
 .. _SQR-051: https://sqr-051.lsst.io/
-.. _DMTN-163: https://dmtn-163.lsst.io/
+.. _DMTN-193: https://dmtn-193.lsst.io/
 .. _DMTN-225: https://dmtn-225.lsst.io/
 
 Vendor evaluations
