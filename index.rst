@@ -232,6 +232,35 @@ Instead, whenever that information is needed, it is retrieved from the COmanage 
 
 In either case, the same API is used to retrieve the user metadata, and user metadata is passed via the same HTTP headers, all of which are described in SQR-049_.
 
+GitHub
+------
+
+Several behaviors of the GitHub OAuth 2.0 authentication flow warrant comment.
+
+Organizational membership
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When the user is sent to GitHub to perform an OAuth 2.0 authentication, they are told what information about their account the application is requesting, and are prompted for which organizational information to release.
+Since we're using GitHub for group information, all organizations that should contribute to group information (via team membership) must have their data released.
+GitHub supports two ways of doing this: make the organization membership public, or grant the OAuth App access to that organization's data explicitly.
+GitHub allows the user to do the latter in the authorization screen during OAuth 2.0 authentication.
+
+.. figure:: /_static/github-oauth.png
+   :name: GitHub OAuth authorization screen
+
+   The authorization screen shown by GitHub during an OAuth App authentication.
+   The organizations with green checkmarks either have public membership or that OAuth App was already authorized to get organization data from them.
+   The "InterNetNews" organization does not share organization membership but allows any member to authorize new OAuth Apps with the :guilabel:`Grant`.
+   The "cracklib" organization does not share organization membership and requires any new authorizations be approved by administrators, which can be requested with :guilabel:`Request`.
+
+This UI is not very obvious for users, and for security reasons we may not wish users who are not organization administrators to be able to release organization information to any OAuth App that asks.
+Therefore, either organization membership should be set to public for all organizations used to control access to Science Platform deployments protected by GitHub, or someone authorized to approve OAuth Apps for each organization that will be used for group information should authenticate to the Science Platform deployment and use the :guilabel:`Grant` button to grant access to that organization's data.
+
+If the user has authenticated with GitHub, the token returned to the OAuth App by GitHub is stored in the user's encrypted cookie.
+When the user logs out, that token is used to explicitly revoke the user's OAuth App authorization at GitHub.
+This forces the user to return to the OAuth App authorization screen when logging back in, which in turn will cause GitHub to release any new or changed organization information.
+Without the explicit revocation, GitHub reuses the prior authorization with the organization and team data current at that time and doesn't provide data from new organizations.
+
 Federated identities
 ====================
 
