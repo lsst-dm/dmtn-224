@@ -346,19 +346,28 @@ References
 Design
 ------
 
-SQR-039_
-    Problem statement and proposed redesign for the identity management system.
-    This document contains a detailed discussion of the decision not to use :abbr:`JWTs (JSON Web Tokens)` in the authentication system, and to keep authorization information such as group credentials out of the authentication tokens.
-
-    This is currently the operative design document for the identity management system, although portions of this document are obsolete.
-    It will be replaced with a revised design document in the future.
-
 SQR-044_
     Requirements for the identity management system.
+    This document is now incompete and partly out of date, but still provides useful detail of requirements that have not yet been incorporated into the design.
 
 SQR-049_
     Detailed design of the token management system for the Science Platform, including its API and storage model.
     Not all of the elements of this design have been implemented, and some of them may be modified before implementation.
+
+DMTN-225_
+    Metadata gathered and stored for each user, including constraints such as valid username and group name patterns and UID and GID ranges.
+
+DMTN-234_
+    High-level design for the Rubin Science Platform identity management system.
+    This is the document to read first to understand the overall system.
+
+.. _SQR-044: https://sqr-044.lsst.io/
+.. _SQR-049: https://sqr-049.lsst.io/
+.. _DMTN-225: https://dmtn-225.lsst.io/
+.. _DMTN-234: https://dmtn-225.lsst.io/
+
+Security
+--------
 
 SQR-051_
     Discussion of credential leaks from the authentication system to backend services, and possible fixes and mitigations.
@@ -366,15 +375,60 @@ SQR-051_
 DMTN-193_
     General discussion of web security for the Science Platform, which among other topics suggests additional design considerations for the Science Platform ingress, authentication layer, and authorization layer.
 
-DMTN-225_
-    Metadata gathered and stored for each user, including constraints such as valid username and group name patterns and UID and GID ranges.
-
-.. _SQR-039: https://sqr-039.lsst.io/
-.. _SQR-044: https://sqr-044.lsst.io/
-.. _SQR-049: https://sqr-049.lsst.io/
 .. _SQR-051: https://sqr-051.lsst.io/
 .. _DMTN-193: https://dmtn-193.lsst.io/
-.. _DMTN-225: https://dmtn-225.lsst.io/
+
+Implementation details
+----------------------
+
+DMTN-235_
+    Lists the token scopes used by the identity management system, defines them, and documents the services to which they grant access.
+
+SQR-055_
+    How to configure COmanage for the needs of the identity management component of the Science Platform.
+
+.. _DMTN-235: https://dmtn-235.lsst.io/
+.. _SQR-055: https://sqr-055.lsst.io/
+
+Operations
+----------
+
+Gafaelfawr_
+    The primary component of the identity management system.
+    Its documentation convers operational issues such as configuration and maintenance.
+
+Phalanx_
+    The configuration and deployment infrastructure for the Science Platform.
+    Its documentation includes operational details on how to configure services to correctly use the identity management system.
+
+.. _Gafaelfawr: https://gafaelfawr.lsst.io/
+.. _Phalanx: https://phalanx.lsst.io/
+
+Project documents
+-----------------
+
+These are higher-level documents discussing Vera C. Rubin Observatory and the Science Platform as a whole that contain information relevant to the design and implementation of the identity management system.
+
+LDM-554_
+    General requirements document for the Science Platform.
+    This includes some requirements for the identity management system.
+
+LSE-279_
+    General discussion of authentication and authorization for Vera C. Rubin Observatory.
+    This is primarily a definition of terms and very high-level requirements for identity management.
+    The group naming scheme described in this document has been replaced with the scheme in DMTN-235_.
+
+LPM-121_
+    Information security policy and procedures for Vera C. Rubin Observatory.
+    This document is primarily concerned with defining roles and responsibilities.
+
+RDO-013_
+    The Vera C. Rubin Observatory Data Policy, which defines who will have access to Rubin Observatory data.
+
+.. _LDM-554: https://ldm-554.lsst.io/
+.. _LSE-279: https://docushare.lsst.org/docushare/dsweb/Get/LSE-279
+.. _LPM-121: https://docushare.lsst.org/docushare/dsweb/Get/LPM-121
+.. _RDO-013: https://docushare.lsst.org/docushare/dsweb/Get/RDO-13
 
 Vendor evaluations
 ------------------
@@ -385,12 +439,8 @@ SQR-045_
 SQR-046_
     Evaluation of GitHub for use as the basis of user identity management and group management.
 
-SQR-055_
-    How to configure COmanage for the needs of the identity management component of the Science Platform.
-
 .. _SQR-045: https://sqr-045.lsst.io/
 .. _SQR-046: https://sqr-046.lsst.io/
-.. _SQR-055: https://sqr-055.lsst.io/
 
 History
 -------
@@ -401,5 +451,10 @@ DMTN-094_
 DMTN-116_
     Original implementation strategy for the identity management system, now superseded and of historical interest only.
 
+SQR-039_
+    Problem statement and proposed redesign for the identity management system.
+    This document contains a detailed discussion of the decision not to use :abbr:`JWTs (JSON Web Tokens)` in the authentication system, and to keep authorization information such as group credentials out of the authentication tokens.
+
+.. _SQR-039: https://sqr-039.lsst.io/
 .. _DMTN-094: https://dmtn-094.lsst.io/
 .. _DMTN-116: https://dmtn-116.lsst.io/
