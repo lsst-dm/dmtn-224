@@ -8,16 +8,11 @@ Abstract
 The identity management, authentication, and authorization component of the Rubin Science Platform is responsible for maintaining a list of authorized users and their associated identity information, authenticating their access to the Science Platform, and determining which services they are permitted to use.
 This tech note describes the technical details of the implementation of that system.
 
-Described here is an implementation of the design tentatively put forward in SQR-039_ and subsequently revised, and is intended to partially fulfill the requirements laid out in SQR-044_.
-References to requirements of the form **IDM-NNNN** are references to SQR-044_.
-Most of the implementation of the identity management system is contained in the Gafaelfawr_ project.
+.. note::
 
-.. _Gafaelfawr: https://gafaelfawr.lsst.io/
-
-See :ref:`References <references>` for a list of other tech notes that outline the history of the design process for the Rubin Science Platform identity management system and go into more detail on specific portions of the overall system.
-
-This document does not discuss the NCSA deployments of the Science Platform, which vary from the implementation designed below in a few ways.
-Those deployments are scheduled to be decommissioned, so only those configuration differences that will still be present in other Science Platform deployments are discussed here.
+   This is part of a tech note series on identity management for the Rubin Science Platform.
+   The other primary documents are DMTN-234_, which describes the high-level design; and SQR-069_, which provides a history and analysis of the decisions underlying the design and implementation.
+   See :ref:`References <references>` for a complete list of related documents.
 
 Implementation overview
 =======================
