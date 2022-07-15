@@ -5,8 +5,8 @@
 Abstract
 ========
 
-The identity management system for the Vera C. Rubin Science Platform registers and authenticates users, maintains their group membership and other associated permissions such as quotas, and answers authorization questions from other Science Platform services.
-This document describes the implementation strategy and choices for the identity management system.
+The identity management, authentication, and authorization component of the Rubin Science Platform is responsible for maintaining a list of authorized users and their associated identity information, authenticating their access to the Science Platform, and determining which services they are permitted to use.
+This tech note describes the technical details of the implementation of that system.
 
 Described here is an implementation of the design tentatively put forward in SQR-039_ and subsequently revised, and is intended to partially fulfill the requirements laid out in SQR-044_.
 References to requirements of the form **IDM-NNNN** are references to SQR-044_.
