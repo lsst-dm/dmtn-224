@@ -17,28 +17,35 @@ This tech note describes the technical details of the implementation of that sys
 Implementation overview
 =======================
 
-The source of identity for users of the Science Platform varies from deployment to deployment.
-The general-purpose public-facing deployment will use federated identity via InCommon.
-Deployments restricted to project team members may use GitHub or local authentication mechanisms.
-International Data Facility deployments may use other sources of federated identity or other local identity management systems.
-The implementation of the Science Platform allows configuration of the source of user identity and supports both GitHub and OpenID Connect as protocols for determining identity.
+The primary components of the identity management system for the Rubin Science Platform are:
 
-For deployments using InCommon, the Science Platform uses CILogon_ to authenticate the user via their choice of federated identity provider.
+#. Some external source of user authentication
+#. A repository of identity information about users (name, email, group membership, etc.)
+#. A Kubernetes service (Gafaelfawr_) which runs in each Science Platform deployment, performs user authentication, applies high-level access control rules, and provides identity information to other Science Platform services via an API
+#. A configuration of the ingress-nginx_ Kubernetes ingress controller that uses Gafaelfawr_ as an auth subrequest handler to enforce authentication and authorization requirements
+#. A user interface for creating and managing tokens, currently implemented as part of Gafaelfawr_
 
-.. _CILogon: https://www.cilogon.org/
-
-All deployments of the Science Platform use NGINX_ via ingress-nginx_ as the ingress for all access to Science Platform components that require authentication.
-The ingress invokes Gafaelfawr_ as an auth request handler to validate all requests that require authentication.
-Authentication is done via bearer tokens.
-Those bearer tokens may be encapsulated in a browser cookie set by Gafaelfawr or or a token provided in an ``Authorization`` header.
-That auth request handler will pass (via HTTP headers) information about the authenticated user, such as username, numeric UID, and email, to the underlying Science Platform application.
-
-.. _NGINX: https://www.nginx.com/
 .. _ingress-nginx: https://kubernetes.github.io/ingress-nginx/
 
-If the underlying application may need to make other requests on the user's behalf, or (as with the Notebook Aspect) is used interactively by the user to make subsequent requests, or if the application needs to obtain additional information about the user (such as the user's groups), Gafaelfawr will create a delegated token for that application and user.
-Delegated tokens have a subset of the permissions of the user's token and an equal or shorter lifetime.
-If such a token is needed, it will also be passed in an HTTP header.
+The Science Platform in general, and specifically the last three components listed above, are deployed in a Kubernetes cluster using Phalanx_.
+The first two components are external to the Kubernetes cluster in which the Science Platform runs.
+
+Here is that architecture in diagram form:
+
+.. figure:: /_static/science-platform.png
+   :name: High-level Science Platform architecture
+
+   An overview of a Rubin Science Platform deployment.
+   This shows the major aspects of the Science Platform but omits considerable detail, including most supporting services, the identity management store, and some details of the Gafaelfawr architecture.
+
+As discussed in DMTN-234_, there is no single Rubin Science Platform.
+There are multiple deployments of the Science Platform at different sites with different users and different configurations.
+With respect to the identity management system, these differ primarily in the choice of the first two components.
+
+General access deployments of the Science Platform use CILogon_ as the source of user authentication, and COmanage_ as the repository of identity information.
+Restricted access deployments use either GitHub or a local OpenID Connect authentication provider as the source of user authentication; and one of GitHub, a local LDAP server, or the OpenID Connect authentication provider as the source of identity information.
+
+.. _CILogon: https://www.cilogon.org/
 
 Identity management
 ===================
@@ -346,6 +353,13 @@ References
 Design
 ------
 
+DMTN-225_
+    Metadata gathered and stored for each user, including constraints such as valid username and group name patterns and UID and GID ranges.
+
+DMTN-234_
+    High-level design for the Rubin Science Platform identity management system.
+    This is the document to read first to understand the overall system.
+
 SQR-044_
     Requirements for the identity management system.
     This document is now incompete and partly out of date, but still provides useful detail of requirements that have not yet been incorporated into the design.
@@ -354,29 +368,22 @@ SQR-049_
     Detailed design of the token management system for the Science Platform, including its API and storage model.
     Not all of the elements of this design have been implemented, and some of them may be modified before implementation.
 
-DMTN-225_
-    Metadata gathered and stored for each user, including constraints such as valid username and group name patterns and UID and GID ranges.
-
-DMTN-234_
-    High-level design for the Rubin Science Platform identity management system.
-    This is the document to read first to understand the overall system.
-
-.. _SQR-044: https://sqr-044.lsst.io/
-.. _SQR-049: https://sqr-049.lsst.io/
 .. _DMTN-225: https://dmtn-225.lsst.io/
 .. _DMTN-234: https://dmtn-225.lsst.io/
+.. _SQR-044: https://sqr-044.lsst.io/
+.. _SQR-049: https://sqr-049.lsst.io/
 
 Security
 --------
 
-SQR-051_
-    Discussion of credential leaks from the authentication system to backend services, and possible fixes and mitigations.
-
 DMTN-193_
     General discussion of web security for the Science Platform, which among other topics suggests additional design considerations for the Science Platform ingress, authentication layer, and authorization layer.
 
-.. _SQR-051: https://sqr-051.lsst.io/
+SQR-051_
+    Discussion of credential leaks from the authentication system to backend services, and possible fixes and mitigations.
+
 .. _DMTN-193: https://dmtn-193.lsst.io/
+.. _SQR-051: https://sqr-051.lsst.io/
 
 Implementation details
 ----------------------
@@ -455,6 +462,10 @@ SQR-039_
     Problem statement and proposed redesign for the identity management system.
     This document contains a detailed discussion of the decision not to use :abbr:`JWTs (JSON Web Tokens)` in the authentication system, and to keep authorization information such as group credentials out of the authentication tokens.
 
-.. _SQR-039: https://sqr-039.lsst.io/
+SQR-069_
+    Documents the decisions, trade-offs, and analysis behind the current design and implementation of the identity management system.
+
 .. _DMTN-094: https://dmtn-094.lsst.io/
 .. _DMTN-116: https://dmtn-116.lsst.io/
+.. _SQR-039: https://sqr-039.lsst.io/
+.. _SQR-069: https://sqr-069.lsst.io/
