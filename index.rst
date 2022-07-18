@@ -319,6 +319,66 @@ We considered serving the token UI using server-rendered HTML and a separate int
 First, having all changes made through the API (whether by API calls or via JavaScript) ensures that the API always has parity with the UI, ensures that every operation can be done via an API, and avoids duplicating some frontend code.
 Second, other Rubin-developed components of the Science Platform are using JavaScript with a common style dictionary to design APIs, so building the token UI using similar tools will make it easier to maintain a standard look and feel.
 
+Specific services
+=================
+
+The general pattern for protecting a service with authentication and access control is configure its ``Ingress`` resources with the necessary ingress-nginx annotations and then let Gafaelfawr do the work.
+If the service needs information about the user, it obtains that from the ``X-Auth-Request-*`` headers that are set by Gafaelfawr via ingress-nginx.
+However, some Science Platform services require additional special attention.
+
+Notebook Aspect
+---------------
+
+JupyterHub supports an external authentication provider, but then turns that authentication into an internal session that is used to authenticate and authorize subsequent actions by the user.
+This session is normally represented by a cookie JupyterHub sets in the browser.
+JupyterHub also supports bearer tokens, with the wrinkle that JupyterHub requires using the ``token`` keyword instead of ``bearer`` in the ``Authorization`` header.
+
+JupyterHub then acts as an OAuth authentication provider to authenticate the user to any spawned lab.
+The lab obtains an OAuth token for the user from the hub and uses that for subsequent authentication to the lab.
+
+The JupyterHub authentication session can include state, which is stored in the JupyterHub session database.
+In the current Science Platform implementation, that session database is stored in a PostgreSQL server also run inside the same Kubernetes cluster, protected by password authentication with a password injected into the JupyterHub pod.
+The data stored in the authentication session is additionally encrypted with a key known only to JupyterHub.
+
+The ingress for JupyterHub is configured to require Gafaelfawr authentication and access control for all JupyterHub and lab URLs.
+Therefore, regardless of what JupyterHub and the lab think is the state of the user's authentication, the request is not allowed to reach them unless the user is already authenticated, and any redirects to the upstream identity provider are handled before JupyterHub ever receives a request.
+The user is also automatically redirected to the upstream identity provider to reauthenticate if their credentials expire while using JupyterHub.
+The ingress configuration requests a delegated notebook token.
+
+Gafaelfawr is then integrated into JupyterHub with a custom JupyterHub authentication provider.
+That provider runs inside the context of a request to JupyterHub that requires authentication.
+It registers a custom route (``/gafaelfawr/login`` in the Hub's route namespace) and returns it as a login URL.
+That custom route reads the headers from the incoming request, which are set by Gafaelfawr, to find the delegated notebook token, and makes an API call to Gafaelfawr using that token for authentication to obtain the user's identity information.
+That identity information along with the token are then stored as the JupyterHub authentication session state.
+Information from the authentication session state is used when spawning a user lab to control the user's UID, groups, and other information required by the lab, and the notebook token is injected into the lab so that it will be available to the user.
+
+.. figure:: /_static/flow-jupyter.svg
+   :name: JupyterHub and lab authentication flow
+
+   Sequence diagram of the authentication flow between Gafaelfawr, JupyterHub, and the lab.
+   This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (covered in earlier flow diagrams).
+
+Because JupyterHub has its own authentication session that has to be linked to the Gafaelfawr authentication session, there are a few wrinkles here that require special attention.
+
+- When the user reauthenticates (because, for example, their credentials have expired), their JupyterHub session state needs to be refreshed even if JupyterHub thinks their existing session is still valid.
+  Otherwise, JupyterHub will hold on to the old token and continue injecting it into labs, where it won't work and cause problems for the user.
+  JupyterHub is therefore configured to force an authentication refresh before spawning a lab (which is when the token is injected), and the authentication refresh checks the delegated token provided in the request headers to see if it's the same token stored in the authentication state.
+  If it is not, the authentication state is refreshed from the headers of the current request.
+
+- The user's lab may make calls to JupyterHub on the user's behalf.
+  Since the lab doesn't know anything about the Gafaelfawr token, those calls are authenticated using the lab's internal credentials.
+  These must not be rejected by the authentication refresh logic, or the lab will not be allowed to talk to JupyterHub.
+
+  Since all external JupyterHub routes are protected by Gafaelfawr and configured to provide a notebook token, the refresh header can check for the existence of an ``X-Auth-Request-Token`` header set by Gafaelfawr.
+  If that header is not present, the refresh logic assumes that the request is internal and defers to JupyterHub's own authentication checks without also applying the Gafaelfawr authentication integration.
+
+Note that this implementation approach depends on Gafaelfawr reusing an existing notebook token if one already exists.
+Without that caching, there would be unnecessary churn of the JupyterHub authentication state.
+
+The notebook token is only injected into the lab when the lab is spawned, so it's possible for the token in a long-running lab to expire.
+If the user's overall Gafaelfawr session has expired, they will be forced to reauthenticate and their JupyterHub authentication state will then be updated via JupyterHub's authentication refresh, but the new stored token won't propagate automatically to the lab.
+This is currently an open issue, worked around by setting a timeout on labs so that the user is forced to stop and restart the lab rather than keeping the same lab running indefinitely.
+
 Remaining work
 ==============
 

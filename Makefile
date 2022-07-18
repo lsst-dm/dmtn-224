@@ -31,7 +31,11 @@ help:
 clean:
 	rm -rf $(BUILDDIR)/*
 
-images: _static/general-access.png _static/science-platform.png
+images: _static/flow-jupyter.svg _static/general-access.png \
+	_static/science-platform.png
+
+_static/flow-jupyter.svg: _static/flow-jupyter.diag
+	seqdiag -Tsvg _static/flow-jupyter.diag
 
 _static/general-access.png: _static/general-access.py
 	python _static/general-access.py
