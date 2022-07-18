@@ -31,7 +31,10 @@ help:
 clean:
 	rm -rf $(BUILDDIR)/*
 
-images: _static/science-platform.png
+images: _static/general-access.png _static/science-platform.png
+
+_static/general-access.png: _static/general-access.py
+	python _static/general-access.py
 
 _static/science-platform.png: _static/science-platform.py
 	python _static/science-platform.py

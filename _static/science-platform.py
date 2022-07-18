@@ -9,6 +9,7 @@ from diagrams.gcp.network import LoadBalancing
 from diagrams.gcp.storage import Filestore, PersistentDisk
 from diagrams.onprem.client import User
 from diagrams.onprem.compute import Server
+from diagrams.programming.framework import React
 
 os.chdir(os.path.dirname(__file__))
 
@@ -39,8 +40,9 @@ with Diagram(
         ingress = LoadBalancing("ingress-nginx")
 
         with Cluster("Authentication"):
+            ui = React("Gafaelfawr UI")
             gafaelfawr = KubernetesEngine("Gafaelfawr")
-            storage = SQL("Metadata store")
+            storage = SQL("Database")
             redis = KubernetesEngine("Redis")
             redis_storage = PersistentDisk("Redis storage")
 
@@ -64,8 +66,9 @@ with Diagram(
 
     gafaelfawr >> idp
     user >> idp
-    user >> ingress >> gafaelfawr >> redis >> redis_storage
-    gafaelfawr >> storage
+    user >> ingress >> ui >> gafaelfawr >> redis >> redis_storage
+    ingress >> gafaelfawr >> storage
+    ingress << gafaelfawr
     ingress >> hub >> session_storage
     ingress >> lab >> filestore
     lab << hub

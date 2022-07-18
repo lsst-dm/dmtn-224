@@ -43,9 +43,21 @@ There are multiple deployments of the Science Platform at different sites with d
 With respect to the identity management system, these differ primarily in the choice of the first two components.
 
 General access deployments of the Science Platform use CILogon_ as the source of user authentication, and COmanage_ as the repository of identity information.
-Restricted access deployments use either GitHub or a local OpenID Connect authentication provider as the source of user authentication; and one of GitHub, a local LDAP server, or the OpenID Connect authentication provider as the source of identity information.
+Here is the architecture for general access deployments, expanding the identity management portion and simplifying the rest of the Science Platform to a single protected service:
 
 .. _CILogon: https://www.cilogon.org/
+.. _COmanage: https://www.incommon.org/software/comanage/
+
+.. figure:: /_static/general-access.png
+   :name: General access identity management architecture
+
+   Detail of the components for identity management for a general access deployment of the Science Platform.
+   The Science Platform aspects and services are represented here by a single service to make the diagram simpler.
+
+Restricted access deployments use either GitHub or a local OpenID Connect authentication provider as the source of user authentication; and one of GitHub, a local LDAP server, or the OpenID Connect authentication provider as the source of identity information.
+
+A restricted access deployment that uses GitHub looks essentially identical to the first architecture diagram with GitHub as the identity provider.
+One that uses OpenID Connect is similar, but will likely separate the identity provider box into an OpenID Connect provider and an LDAP server that will be queried for metadata.
 
 Identity management
 ===================
