@@ -62,67 +62,162 @@ One that uses OpenID Connect is similar, but will likely separate the identity p
 Identity management
 ===================
 
-The identity management component of the system maps authentication credentials to a user identity with associated metadata.
-The GitHub and OpenID Connect authentication providers are also identity management providers.
-With GitHub, access to the user's profile is requested as part of the OAuth 2.0 request, and user identity is retrieved via the GitHub API after authentication.
-With OpenID Connect, user identity information is extracted from the JWT issued as a result of the OpenID Connect authentication flow.
-With CILogon, COmanage is used, as described below.
+The identity management component of the system authenticates the user and maps that authentication to identity information.
 
-See DMTN-225_ for more details on the metadata stored for each user, and its sources.
+In general access deployments, authentication is done via the OpenID Connect protocol using CILogon, which in turn supports SAML and identity federations as well as other identity providers such as GitHub and Google.
+Restricted access deployments use either an OAuth 2.0 authentication request to GitHub or an OpenID Connect authentication request to a local identity provider.
 
-.. _comanage-auth:
+Once the user has been authenticated, their identity must be associated with additional information: full name, email address, numeric UID, group membership, and numeric GIDs for the groups.
+In general access deployments, most of this data comes from :ref:`COmanage <comanage>` (via LDAP), and numeric UIDs and GIDs come from :ref:`Firestore <firestore>`.
+For restricted access deployments using GitHub, access to the user's profile and organization membership is requested as part of the OAuth 2.0 request, and then retrieved after authentication with the token obtained by the OAuth 2.0 authentication.  See :ref:`GitHub <github>` for more details.
+With OpenID Connect, this information is either extracted from the claims of the JWT_ issued as a result of the OpenID Connect authentication flow, or is retrieved from LDAP.
+
+.. _JWT: https://datatracker.ietf.org/doc/html/rfc7519
+
+See DMTN-225_ for more details on the identity information stored for each user and its sources.
+
+.. _comanage:
 
 COmanage
 --------
 
 COmanage_ is a web application with associated database and API that manages an organization of users.
-It has multiple capabilities, only a few of which will be used by the Science Platform.
+Information about those users is then published to an LDAP server, which can be queried by Gafaelfawr_ as needed.
+COmanage has multiple capabilities, only a few of which will be used by the Science Platform.
 Its main purposes for the Science Platform are to:
 
-.. _COmanage: https://www.incommon.org/software/comanage/
+#. manage the association of users with federated identities;
+#. assign usernames to authenticated users;
+#. determine the eligibility of users for Science Platform access and for roles within that access;
+#. manage group membership, both for groups maintained by Rubin Observatory and for user-managed groups; and
+#. store additional metadata about the user such as email, full name, and institutional affiliation.
 
-- manage the association of users with federated identities;
-- assign usernames to authenticated users;
-- determine the eligibility of users for Science Platform access and for roles within that access;
-- manage group membership in both user-managed groups and groups managed by Vera C. Rubin Observatory; and
-- store additional metadata about the user such as email, full name, and institutional affiliation.
+CILogon is agnostic to whether a user is registered or has an account in some underlying database.
+It prompts the user for an identity provider to use, authenticates them, and then provides that identity information to the OpenID Connect relying party (Gafaelfawr).
+Gafaelfawr, however, only wants to allow access to users who are registered in COmanage, and otherwise ask the user to register so that they can be evaluated and possibly approved for Science Platform access.
 
-Users will request access to the Science Platform by using the self-initiated enrollment flow in COmanage and will be approved by someone authorized to confirm who has access to the project.
-In the future, we may add a mechanism to automatically grant approval based on the user's affiliation or federated authentication mechanism.
-COmanage will then collect email, full name, and institutional affiliation from the user's federated authentication mechanism and store that (IDM-1104).
-The user may attach multiple federated authentication mechanisms to the same account so that they can use the authentication provider of their choice (provided that it is supported by CILogon).
-The user may also change their preferred email address (IDM-1101).
+To implement this, the Gafaelfawr OpenID Connect integration with COmanage is configured to pull the user's registered username (what COmanage calls their UID) from COmanage LDAP.
+CILogon will find their username by looking up their LDAP entry based on the CILogon opaque identifier assigned to that user from that identity provider (which COmanage stores in a multivalued ``uid`` attribute in the person tree in LDAP) and retrieving their username (which COmanage stores in the ``voPersonApplicationUID`` attribute).
+CILogon then adds that username as the ``username`` claim in the JWT provided to Gafaelfawr at the conclusion of the OpenID Connect authentication.
 
-COmanage will expose the information it has stored for a user via LDAP.
-The Science Platform will use LDAP to retrieve that information as needed.
+If that claim is missing, the user is not registered, and Gafaelfawr then redirects them to an :ref:`onboarding flow <comanage-onboarding>`.
+Otherwise, Gafaelfawr retrieves group information from LDAP and then uses that to assign scopes to the newly-created session token (see :ref:`Login flows <login-flows>`).
+
+For the precise details of how COmanage is configured, see SQR-055_.
+
+.. _comanage-onboarding:
+
+COmanage onboarding
+^^^^^^^^^^^^^^^^^^^
+
+If the user is not already registered in COmanage, they will be redirected to an onboarding flow in the COmanage web UI.
+We use the "Self Signup With Approval" flow, one of the standard COmanage enrollment flows, with some modifications detailed in SQR-055_.
+This will use their identity information from CILogon and prompt them for their preferred name, email address, and username.
+They will be required to confirm that they can receive email at the email address they give.
+The choice of username is subject to constraints specified in DMTN-225_.
+The user's COmanage account will then be created in a pending state, and must be approved by an authorized approver before it becomes active and is provisioned in LDAP (and thus allows access to the Science Platform).
+
+Approvers are notified via email by COmanage that a new user is awaiting approval.
+Approval will be based on the institutional affiliation information collected by COmanage from the identity information released by the user's identity provider via CILogon.
+Approvers may have to reach out to the prospective user or their institution to gather additional information before deciding whether the user has data rights.
+
+Once the user is approved, the approver will add them to a group appropriate for their data rights access.
+The user will be notified of their approval via email.
+They will then be able to return to the Science Platform deployment and log in, and CILogon will now release their username in the ``username`` claim, allowing Gafaelfawr to look up their identity information in the LDAP server populated by COmanage, assign them scopes, and allow them to continue to the Science Platform.
+
+COmanage user UI
+^^^^^^^^^^^^^^^^
+
+COmanage provides a web-based user interface to the user.
+From that interface, they can change their preferred name and email address, review their identity information, and unlink any identities they no longer wish to be tied to their account.
+They can also initiate the "Link another account" enrollment flow, which allows them to add an additional federated identity to the same account, provided that it is supported by CILogon.
+All such linked identities can be used interchangeably to authenticate to the same underlying Science Platform account.
 
 COmanage provides a group management mechanism called COmanage Registry Groups.
-This allows users to create and manage groups (IDM-2000, IDM-2002, IDM-2003, IDM-2008, IDM-4003).
-We will use this group mechanism for both user-managed and institution-managed groups, and use those groups to make authorization decisions (and related decisions such as quotas) for the Science Platform.
+This allows users to create and manage groups.
+This group mechanism is used for both user-managed and institution-managed groups.
+From the COmanage UI, users can change the membership of any group over which they have administrative rights, and can create new user-managemd groups.
 
-COmanage administrators can edit user metadata using the COmanage web UI (IDM-1300).
-They can also change any group, including user-managed groups (IDM-2200).
+COmanage administrators (designated by their membership in an internal COmanage group) can edit user identity information of other users via the COmanage UI, and can change any group (including user-managed groups, although normally an administrator will only do that to address some sort of problem or support issue).
 
-Discarded alternatives
-----------------------
+COmanage LDAP
+^^^^^^^^^^^^^
 
-We considered other approaches to accepting federated identity.
+The data stored in COmanage is exported to LDAP in two trees.
+The person tree holds entries for each Science Platform user.
+The group tree holds entries for every group (Rubin-managed or user-managed).
 
-Supporting InCommon directly was rejected as too complex; direct support of federated authentication is complex and requires a lot of ongoing maintenance work.
+During login, and when a Science Platform application requests user identity data, Gafaelfawr retrieves user identity information by looking up the user in the person tree, and retrieves the user's group membership by searching for all groups that have that user as a member.
 
-There are several services that provide federated identity as a service.
-Most of them charge per user.
-Given the expected number of users of the eventual production Science Platform, CILogon and its COmanage service appeared to be the least expensive option.
-It also builds on a pre-existing project relationship and uses a service run by a team with extensive experience supporting federated authentication for universities and scientific collaborations.
+A typical person tree entry looks like::
 
-Subsequent to that decision, we became aware of Auth0_ and its B2C authentication service, which appears to be competitive with CILogon on cost and claims to also support federated identity.
-We have not done a deep investigation of that alternative.
+    dn: voPersonID=LSST100006,ou=people,o=LSST,o=CO,dc=lsst,dc=org
+    sn: Allbery
+    cn: Russ Allbery
+    objectClass: person
+    objectClass: organizationalPerson
+    objectClass: inetOrgPerson
+    objectClass: eduMember
+    objectClass: voPerson
+    displayName: Russ Allbery
+    mail: rra@lsst.org
+    uid: http://cilogon.org/serverA/users/15423111
+    uid: http://cilogon.org/serverT/users/40811318
+    isMemberOf: CO:members:all
+    isMemberOf: CO:members:active
+    isMemberOf: CO:admins
+    isMemberOf: g_science-platform-idf-dev
+    isMemberOf: g_test-group
+    voPersonApplicationUID: rra
+    voPersonID: LSST100006
+    voPersonSoRID: http://cilogon.org/serverA/users/31388556
 
-.. _Auth0: https://auth0.com/
+``voPersonApplicationUID`` is, as mentioned above, the user's username.
+The ``uid`` multivalued attribute holds the unique CILogon identifiers.
+``voPersonID`` is an internal unique identifier for that user that's used only by COmanage.
+The user's preferred full name is in ``displayName`` and their preferred email address is in ``mail``.
 
-We considered using GitHub rather than InCommon as an identity source, and in fact used GitHub for some internal project deployments and for the DP0 preview release.
-However, not every expected eventual user of the Science Platform will have a GitHub account, and GitHub lacks COmanage's support for onboarding flows, approval, and self-managed groups.
-We also expect to make use of InCommon as a source of federated identity since it supports many of our expected users, and GitHub does not provide easy use of InCommon as a source of identities.
+A typical group tree entry looks like::
+
+    dn: cn=g_science-platform-idf-dev,ou=groups,o=LSST,o=CO,dc=lsst,dc=org
+    cn: g_science-platform-idf-dev
+    member: voPersonID=LSST100006,ou=people,o=LSST,o=CO,dc=lsst,dc=org
+    member: voPersonID=LSST100008,ou=people,o=LSST,o=CO,dc=lsst,dc=org
+    member: voPersonID=LSST100009,ou=people,o=LSST,o=CO,dc=lsst,dc=org
+    member: voPersonID=LSST100010,ou=people,o=LSST,o=CO,dc=lsst,dc=org
+    member: voPersonID=LSST100011,ou=people,o=LSST,o=CO,dc=lsst,dc=org
+    member: voPersonID=LSST100012,ou=people,o=LSST,o=CO,dc=lsst,dc=org
+    member: voPersonID=LSST100013,ou=people,o=LSST,o=CO,dc=lsst,dc=org
+    objectClass: groupOfNames
+    objectClass: eduMember
+    hasMember: rra
+    hasMember: adam
+    hasMember: frossie
+    hasMember: jsick
+    hasMember: cbanek
+    hasMember: afausti
+    hasMember: simonkrughoff
+
+.. _github:
+
+GitHub
+------
+
+A Science Platform deployment using GitHub registers Gafaelfawr as an OAuth App.
+When the user is sent to GitHub to perform an OAuth 2.0 authentication, they are told what information about their account the application is requesting, and are prompted for which organizational information to release.
+After completion of the OAuth 2.0 authentication flow, Gafaelfawr then retrieves the user's identity information (full name, email address, and UID) and their team memberships from any of their organizations.
+
+Group membership for Science Platform purposes is synthesized from GitHub team membership.
+Each team membership that an authenticated user has on GitHub (and releases through the GitHub OAuth authentication) will be mapped to a group.
+The name of the group will be ``<organization>-<team-slug>`` where ``<organization>`` is the ``login`` attribute (forced to lowercase) of the organization containing the team and ``<team-slug>`` is the ``slug`` attribute of the team.
+These values are retrieved through GitHub's ``/user/teams`` API route.
+The ``slug`` attribute is constructed by GitHub based on the name of the team, removing case differences and replacing special characters like space with a dash.
+
+Some software may limit the length of group names to 32 characters, and forming group names this way may result in long names if both the organization and team name is long.
+Therefore, if the group name formed as above is longer than 32 characters, it will be truncated and made unique.
+The full group name will be hashed (with SHA-256) and truncated at 25 characters, and then a dash and the first six characters of the URL-safe-base64-encoded hash will be appended.
+
+The ``id`` attribute for each team will be used as the GID of the corresponding group.
 
 Authentication flows
 ====================
