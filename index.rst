@@ -129,9 +129,14 @@ COmanage user UI
 ^^^^^^^^^^^^^^^^
 
 COmanage provides a web-based user interface to the user.
-From that interface, they can change their preferred name and email address, review their identity information, and unlink any identities they no longer wish to be tied to their account.
-They can also initiate the "Link another account" enrollment flow, which allows them to add an additional federated identity to the same account, provided that it is supported by CILogon.
+From that interface, they can change their preferred name and email address and review their identity information.
+
+To add another federated identity for the same user, the user can initiate the "Link another account" enrollment flow.
+They will be prompted to log in again at CILogon, and can pick a different authentication provider.
+After completing that authentication, the new identity and authentication method will be added to their existing account.
 All such linked identities can be used interchangeably to authenticate to the same underlying Science Platform account.
+
+If the user no longer intends to use an identity provider, they can unlink it from their account in the UI.
 
 COmanage provides a group management mechanism called COmanage Registry Groups.
 This allows users to create and manage groups.
@@ -219,11 +224,17 @@ The full group name will be hashed (with SHA-256) and truncated at 25 characters
 
 The ``id`` attribute for each team will be used as the GID of the corresponding group.
 
+If the user has authenticated with GitHub, the token returned to the OAuth App by GitHub is stored in the user's encrypted cookie.
+When the user logs out, that token is used to explicitly revoke the user's OAuth App authorization at GitHub.
+This forces the user to return to the OAuth App authorization screen when logging back in, which in turn will cause GitHub to release any new or changed organization information.
+Without the explicit revocation, GitHub reuses the prior authorization with the organization and team data current at that time and doesn't provide data from new organizations.
+See :ref:`Cookie data <cookie-data>` for more information.
+
 Authentication flows
 ====================
 
-For deployments that use COmanage and CILogon, such as the IDF and CDF, see :ref:`New user approval <new-user>` for details on the onboarding flow.
-The rest of this section assumes that the user's account record already exists.
+For general access environments that use COmanage, this section assumes the COmanage account for the user already exists.
+If it does not, see :ref:`COmanage onboarding <comanage-onboarding>`.
 
 Browser flow
 ------------
@@ -341,60 +352,13 @@ Instead, whenever that information is needed, it is retrieved from the COmanage 
 
 In either case, the same API is used to retrieve the user metadata, and user metadata is passed via the same HTTP headers, all of which are described in SQR-049_.
 
-GitHub
-------
+Storage
+=======
 
-Several behaviors of the GitHub OAuth 2.0 authentication flow warrant comment.
+.. _cookie-data:
 
-Organizational membership
-^^^^^^^^^^^^^^^^^^^^^^^^^
-
-When the user is sent to GitHub to perform an OAuth 2.0 authentication, they are told what information about their account the application is requesting, and are prompted for which organizational information to release.
-Since we're using GitHub for group information, all organizations that should contribute to group information (via team membership) must have their data released.
-GitHub supports two ways of doing this: make the organization membership public, or grant the OAuth App access to that organization's data explicitly.
-GitHub allows the user to do the latter in the authorization screen during OAuth 2.0 authentication.
-
-.. figure:: /_static/github-oauth.png
-   :name: GitHub OAuth authorization screen
-
-   The authorization screen shown by GitHub during an OAuth App authentication.
-   The organizations with green checkmarks either have public membership or that OAuth App was already authorized to get organization data from them.
-   The "InterNetNews" organization does not share organization membership but allows any member to authorize new OAuth Apps with the :guilabel:`Grant`.
-   The "cracklib" organization does not share organization membership and requires any new authorizations be approved by administrators, which can be requested with :guilabel:`Request`.
-
-This UI is not very obvious for users, and for security reasons we may not wish users who are not organization administrators to be able to release organization information to any OAuth App that asks.
-Therefore, either organization membership should be set to public for all organizations used to control access to Science Platform deployments protected by GitHub, or someone authorized to approve OAuth Apps for each organization that will be used for group information should authenticate to the Science Platform deployment and use the :guilabel:`Grant` button to grant access to that organization's data.
-
-If the user has authenticated with GitHub, the token returned to the OAuth App by GitHub is stored in the user's encrypted cookie.
-When the user logs out, that token is used to explicitly revoke the user's OAuth App authorization at GitHub.
-This forces the user to return to the OAuth App authorization screen when logging back in, which in turn will cause GitHub to release any new or changed organization information.
-Without the explicit revocation, GitHub reuses the prior authorization with the organization and team data current at that time and doesn't provide data from new organizations.
-
-Federated identities
-====================
-
-This section only applies to Science Platform deployments that use CILogon and COmanage, such as the IDF and CDF.
-
-.. _new-user:
-
-New user approval
------------------
-
-Implements IDM-0002, IDM-0003, IDM-0006, IDM-0010, IDM-0011, IDM-0013, IDM-1000, and IDM-1102.
-
-Adding additional identities
-----------------------------
-
-Implements IDM-0004, IDM-0005, and IDM-0006.
-
-Once the user has a COmanage account (via onboarding through some federated identity and approval by someone with access to approve new users), they can add additional federated identities.
-All of those identities will then map to the same account and can be used interchangeably for Science Platform access.
-
-To do this in COmanage, choose the "Link another account" enrollment flow from the user menu in the top right.
-The user will then be asked to authenticate again, and can pick a different authentication provider from the one they're already using.
-After completing that authentication, the new identity and authentication method will be added to their existing account.
-
-The user can then see all of their linked identities from their COmanage profile page and unlink any of them if they choose.
+Cookie data
+-----------
 
 Token UI
 ========
