@@ -54,7 +54,9 @@ Here is the architecture for general access deployments, expanding the identity 
    Detail of the components for identity management for a general access deployment of the Science Platform.
    The Science Platform aspects and services are represented here by a single service to make the diagram simpler.
 
-Restricted access deployments use either GitHub or a local OpenID Connect authentication provider as the source of user authentication; and one of GitHub, a local LDAP server, or the OpenID Connect authentication provider as the source of identity information.
+Restricted access deployments use either GitHub or a local `OpenID Connect`_ authentication provider as the source of user authentication; and one of GitHub, a local LDAP server, or the OpenID Connect authentication provider as the source of identity information.
+
+.. _OpenID Connect: https://openid.net/specs/openid-connect-core-1_0.html
 
 A restricted access deployment that uses GitHub looks essentially identical to the first architecture diagram with GitHub as the identity provider.
 One that uses OpenID Connect is similar, but will likely separate the identity provider box into an OpenID Connect provider and an LDAP server that will be queried for metadata.
@@ -68,7 +70,7 @@ In general access deployments, authentication is done via the OpenID Connect pro
 Restricted access deployments use either an OAuth 2.0 authentication request to GitHub or an OpenID Connect authentication request to a local identity provider.
 
 Once the user has been authenticated, their identity must be associated with additional information: full name, email address, numeric UID, group membership, and numeric GIDs for the groups.
-In general access deployments, most of this data comes from :ref:`COmanage <comanage>` (via LDAP), and numeric UIDs and GIDs come from :ref:`Firestore <firestore>`.
+In general access deployments, most of this data comes from :ref:`COmanage <comanage-idm>` (via LDAP), and numeric UIDs and GIDs come from :ref:`Firestore <firestore>`.
 For restricted access deployments using GitHub, access to the user's profile and organization membership is requested as part of the OAuth 2.0 request, and then retrieved after authentication with the token obtained by the OAuth 2.0 authentication.  See :ref:`GitHub <github>` for more details.
 With OpenID Connect, this information is either extracted from the claims of the JWT_ issued as a result of the OpenID Connect authentication flow, or is retrieved from LDAP.
 
@@ -76,7 +78,7 @@ With OpenID Connect, this information is either extracted from the claims of the
 
 See DMTN-225_ for more details on the identity information stored for each user and its sources.
 
-.. _comanage:
+.. _comanage-idm:
 
 COmanage
 --------
@@ -101,7 +103,7 @@ CILogon will find their username by looking up their LDAP entry based on the CIL
 CILogon then adds that username as the ``username`` claim in the JWT provided to Gafaelfawr at the conclusion of the OpenID Connect authentication.
 
 If that claim is missing, the user is not registered, and Gafaelfawr then redirects them to an :ref:`onboarding flow <comanage-onboarding>`.
-Otherwise, Gafaelfawr retrieves group information from LDAP and then uses that to assign scopes to the newly-created session token (see :ref:`Login flows <login-flows>`).
+Otherwise, Gafaelfawr retrieves group information from LDAP and then uses that to assign scopes to the newly-created session token (see :ref:`Browser flows <browser-flows>`).
 
 For the precise details of how COmanage is configured, see SQR-055_.
 
@@ -224,59 +226,144 @@ The full group name will be hashed (with SHA-256) and truncated at 25 characters
 
 The ``id`` attribute for each team will be used as the GID of the corresponding group.
 
-If the user has authenticated with GitHub, the token returned to the OAuth App by GitHub is stored in the user's encrypted cookie.
-When the user logs out, that token is used to explicitly revoke the user's OAuth App authorization at GitHub.
-This forces the user to return to the OAuth App authorization screen when logging back in, which in turn will cause GitHub to release any new or changed organization information.
-Without the explicit revocation, GitHub reuses the prior authorization with the organization and team data current at that time and doesn't provide data from new organizations.
-See :ref:`Cookie data <cookie-data>` for more information.
-
 Authentication flows
 ====================
 
 For general access environments that use COmanage, this section assumes the COmanage account for the user already exists.
 If it does not, see :ref:`COmanage onboarding <comanage-onboarding>`.
 
-Browser flow
-------------
+.. _browser-flows:
 
-Implements IDM-0001 and IDM-0200.
+Browser flows
+-------------
 
-If the user visits a Science Platform page intended for a web browser (as opposed to APIs) and is not already authenticated (either missing a cookie or having an expired cookie), they will be sent to an appropriate authentication provider.
-This normally uses the `OpenID Connect`_ protocol.
-(Authentications to GitHub instead use GitHub's OAuth 2.0 protocol instead.)
+If the user visits a Science Platform page intended for a web browser (as opposed to APIs) and is not already authenticated (either missing a cookie or having an expired cookie), they will be sent to an identity provider to authenticate.
 
-.. _OpenID Connect: https://openid.net/specs/openid-connect-core-1_0.html
+.. _generic-browser-flow:
 
-Three different authentication providers are supported:
+Generic authentication flow
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-- GitHub_
-- CILogon_
-- Generic OpenID Connect support
+Here are the generic steps of a browser authentication flow.
+The details of steps 5 and 6 vary depending on the authentication provider, as discussed in greater depth below.
 
-.. _GitHub: https://docs.github.com/en/developers/apps/building-oauth-apps/authorizing-oauth-apps
+#. The user attempts to access a Science Platform web page that requires authentication.
+#. The Gafaelfawr ``/auth`` route receives the headers of the original request.
+   No token is present in an ``Authorization`` header, nor is there an authentication session cookie.
+   The ``/auth`` route therefore returns an HTTP 401 error.
+#. ingress-nginx determines from its annotations that this means the user should be redirected to the ``/login`` route with the original URL included in the ``X-Auth-Request-Redirect`` header.
+#. The Gafaelfawr ``/login`` route sets a session cookie containing a randomly-generated ``state`` parameter (for session fixation protection).
+   It also includes the return URL in that session cookie.
+   It then returns a redirect to the authentication provider that contains the ``state`` string plus other required information for the authentication request.
+#. The user interacts with the authentication provider to prove their identity, which eventually results in a redirect back to the ``/login`` route.
+   That return request includes an authorization code and the original ``state`` string, as well as possibly other information.
+#. The ``/login`` route requires the ``state`` code match the value from the user's session cookie to protect against session fixation.
+   It then extracts the authorization code and redeems it for a token from the authentication provider.
+   Gafaelfawr may then validate that token and may use it to get more information about the user, depending on the identity provider as discussed below.
+#. Based on the user's identity data, the ``/login`` route creates a new session token and stores the associated data in the Gafaelfawr token store.
+   If Firestore is used for UIDs, the UID for this username is retrieved from Firestore and stored with the token.
+   It then stores that token in the user's session cookie.
+   Finally, it redirects the user back to the original URL.
+#. When the user requests the original URL, this results in another authentication subrequest to the ``/auth`` route.
+   This time, the ``/auth`` route finds the session cookie and extracts the token from that cookie.
+   It retrieves the token details from the token store and decrypts and verifies it.
+   It then checks the scope information of that token against the requested authentication scope given as a ``scope`` parameter to the ``/auth`` route.
+   If the requested scope or scopes are not satisfied, it returns a 403 error.
+   If LDAP is configured, user metadata such as group memberships and email address are retrieved from LDAP.
+   That metadata, either from the data stored with the token or from LDAP, is added to additional response headers.
+   Gafaelfawr then returns 200 with those response headers, and NGINX then proxies the request to the protected application and user interaction continues as normal, possibly including some of the response headers in the proxied request.
 
-In all cases, the authentication flow first redirects the user's web browser to the authentication provider (which in the case of CILogon may be multiple hops, first to CILogon and then to the underlying federated identity provider).
-The user authenticates there.
-Then, the browser is redirected back to the Science Platform with an authentication code, which is redeemed for credentials from the upstream authentication provider and then used to retrieve metadata about the user.
-That data, in turn, is used to create a new token, which is stored in the user's cookies for the Science Platform.
-This token is called a "session" token.
+CILogon
+^^^^^^^
 
-The authentication cookie is marked ``Secure`` and ``HttpOnly`` and is encrypted in a private key of that Science Platform instance (IDM-0008).
+Here is the CILogon authorization flow in detail.
 
-The data gathered for each user, and its sources, are detailed in DMTN-225_.
+.. figure:: /_static/flow-login-cilogon.svg
+   :name: CILogon browser authentication flow
 
-Token scopes
-------------
+The following specific steps happen during step 5 of the :ref:`generic browser flow <generic-browser-flow>`.
 
-Implements IDM-0104.
+#. CILogon prompts the user for which identity provider to use, unless the user has previously chosen an identity provider and told CILogon to remember that selection.
+#. CILogon redirects the user to that identity provider.
+   That identity provider does whatever it chooses to do to authenticate the user and redirects the user back to CILogon.
+   CILogon then takes whatever steps are required to complete the authentication using whatever protocol that identity provider uses, whether it's SAML, OAuth 2.0, OpenID Connect, or something else.
 
-Each token is associated with a list of scopes.
-Those scopes are used to control access to components of the Science Platform.
-The scopes of a user's session token are determined from their group memberships at the point when the session token is created and a mapping from groups to scopes maintained in the Science Platform configuration.
-The scopes then do not change for the lifetime of the token.
+The following specific steps happen during step 6 of the generic browser flow, in addition to the ``state`` validation and code redemption:
 
-Tokens for that user created via their session token (such as :ref:`user tokens <user-tokens>` and :ref:`internal tokens <internal-tokens>`) have a subset of the scopes of the session token.
-In some cases, that may be the same list of scopes, but in most cases, it will be a proper subset.
+#. Gafaelfawr retrieves the OpenID Connect configuration information for CILogon (if it is not already cached) and checks the signature on the JWT identity token.
+#. Gafaelfawr extracts the user's username from the ``username`` claim of the identity token.
+   If that claim is missing, Gafaelfawr redirects the user to the enrollment flow at COmanage, which aborts the user's attempt to access whatever web page they were trying to visit.
+#. Gafaelfawr retrieves the user's UID from Firestore, assigning a new UID if necessry if that username had not been seen before.
+#. Gafaelfawr retrieves the user's group membership from LDAP using the ``username`` as the search key.
+
+Subsequently, whenever Gafaelfawr receives an authentication subrequest to the ``/auth`` route, it retrieves the user's identity information and group membership from LDAP.
+For each group, the GID for that group is retrieved from Firestore, and a new GID is assigned if that group has not been seen before.
+That data is then returned in HTTP headers that ingress-nginx includes in the request to the Science Platform service being accessed.
+Similarly, Gafaelfawr retrieves the user's identity information and group membership from LDAP and Firestore whenever it receives a request for the user information associated with a token.
+(In practice, both the LDAP and Firestore data is usually cached.  See :ref:`Caching <caching>` for more information.)
+
+Note that, in the CILogon and COmanage case, user identity data is not stored with the token.
+Gafaelfawr retrieves it on the fly whenever it is needed (possibly via a cache).
+Changes to COmanage are therefore reflected immediately in the Science Platform (after the expiration of any cache entries).
+
+GitHub
+^^^^^^
+
+Here is the GitHub authentication flow in detail.
+
+.. figure:: /_static/flow-login-github.svg
+   :name: GitHub browser authentication flow
+
+   Sequence diagram of the browser authentication flow with GitHub.
+
+The following specific steps happen during step 5 of the :ref:`generic browser flow <generic-browser-flow>`.
+
+#. GitHub prompts the user for their authentication credentials if they're not already authenticated.
+#. If the user has not previously authorized the OAuth App for this Science Platform deployment, the user is prompted to confirm to GitHub that it's okay to release their identity information and organization membership to Gafaelfawr.
+
+The following specific steps happen during step 6 of the generic browser flow, in addition to the ``state`` validation and code redemption.
+
+#. Using the authentication token received after redeeming the code, the user's full name and ``id`` (used as their UID) is retrieved from the GitHub ``/user`` route.
+#. Using the same token, the user's primary email address is retrieved from the GitHub ``/usr/emails`` route.
+#. Using the same token, the user's team memberships (where Gafaelfawr is authorized to access them) are retrieved from the GitHub ``/user/teams`` route.
+#. The token is then stored in the user's encrypted cookie as their GitHub session token.
+
+The user's identity data retrieved from GitHub is stored with the session token and inherited by any other child tokens of the session token, or any user tokens created using that session token.
+Changes on the GitHub side are not reflected in the Science Platform until the user logs out and logs back in, at which point their information is retrieved fresh from GitHub and stored in the new session token and any of its subsequent child tokens or user tokens.
+
+When the user logs out, the GitHub session token is used to explicitly revoke the user's OAuth App authorization at GitHub.
+This forces the user to return to the OAuth App authorization screen when logging back in, which in turn will cause GitHub to release any new or changed organization information.
+Without the explicit revocation, GitHub reuses the prior authorization with the organization and team data current at that time and doesn't provide data from new organizations.
+See :ref:`Cookie data <cookie-data>` for more information.
+
+OpenID Connect
+^^^^^^^^^^^^^^
+
+Here is the OpenID Connect authentication flow in detail.
+
+.. figure:: /_static/flow-login-oidc.svg
+   :name: OpenID Connect browser authentication flow
+
+   Sequence diagram of the browser authentication flow for a generic OpenID Connect provider, assuming identity data is stored in LDAP.
+
+The following specific steps happen during step 6 of the :ref:`generic browser flow <generic-browser-flow>`.
+
+#. Gafaelfawr retrieves the OpenID Connect configuration information for the OpenID Connect provider (if it is not already cached) and checks the signature on the JWT identity token.
+#. Gafaelfawr extracts the user's username from a claim of the identity token.
+   (This is configured per OpenID Connect provider.)
+#. If LDAP is not configured, Gafaelfawr extracts the user's identity information from the JWT to store it with the session token.
+#. If LDAP is configured, Gafaelfawr retrieves the user's group membership from LDAP using the username as a key.
+
+If LDAP is configured, whenever Gafaelfawr receives an authentication subrequest to the ``/auth`` route, it retrieves the user's identity information and group membership from LDAP.
+That data is then returned in HTTP headers that ingress-nginx includes in the request to the Science Platform service being accessed.
+Similarly, if LDAP is configured, Gafaelfawr retrieves the user's identity information and group membership from LDAP whenever it receives a request for the user information associated with a token.
+(In practice, the LDAP data is usually cached.  See :ref:`Caching <caching>` for more information.)
+
+If LDAP is in use, user identity data is not stored with the token.
+Gafaelfawr retrieves it on the fly whenever it is needed (possibly via a cache).
+Changes in LDAP are therefore reflected immediately in the Science Platform (after the expiration of any cache entries).
+
+If instead the user's identity information comes from the JWT issued by the OpenID Connect authentication process, that data is stored with the token and inherited by any other child tokens of the session token, or any user tokens created using that session token, similar to how data from GitHub is handled.
 
 .. _user-tokens:
 
@@ -323,7 +410,7 @@ When using CILogon, there is an additional level of indirection.
 Because CILogon supports federated identity, it does not itself guarantee unique usernames or necessarily map an authenticated user to a username.
 Instead, CILogon provides a unique identity URI (for example, ``http://cilogon.org/serverA/users/31388556``).
 
-The mapping of that identity to a username is handled in :ref:`COmanage <comanage-auth>`.
+The mapping of that identity to a username is handled in :ref:`COmanage <comanage-idm>`.
 That information is exposed to the Science Platform via LDAP.
 To determine the username of a newly-authenticated user, the Science Platform therefore does an LDAP lookup for a record with a ``voPersonSoRID`` matching the CILogon identity URI in the ``sub`` claim of the JWT.
 The ``uid`` attribute is the username for Science Platform purposes.
@@ -359,6 +446,18 @@ Storage
 
 Cookie data
 -----------
+
+The authentication cookie is marked ``Secure`` and ``HttpOnly`` and is encrypted in a private key of that Science Platform instance.
+
+.. _firestore:
+
+Firestore
+---------
+
+.. _caching:
+
+Caching
+=======
 
 Token UI
 ========
@@ -415,7 +514,7 @@ Information from the authentication session state is used when spawning a user l
    :name: JupyterHub and lab authentication flow
 
    Sequence diagram of the authentication flow between Gafaelfawr, JupyterHub, and the lab.
-   This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (covered in earlier flow diagrams).
+   This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (see :ref:`Browser flows <browser-flows>`).
 
 Because JupyterHub has its own authentication session that has to be linked to the Gafaelfawr authentication session, there are a few wrinkles here that require special attention.
 

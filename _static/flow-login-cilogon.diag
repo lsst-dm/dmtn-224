@@ -1,0 +1,30 @@
+seqdiag {
+    default_fontsize = 14;
+
+    browser -> ingress;
+        ingress => gafaelfawr [label = "auth subrequest", return = "401"];
+    browser <-- ingress [label = "redirect to /login"];
+    browser -> ingress [label = "/login"];
+        ingress => gafaelfawr;
+    browser <-- ingress [label = "redirect to CILogon"];
+    browser => cilogon [return = "redirect to provider"];
+    browser -> provider [label = "authenticate"];
+    browser <-- provider [label = "redirect to CILogon"];
+    browser -> cilogon [label = "w/authorization code"];
+        cilogon => provider [label = "get ID token", return = "JWT"];
+    browser <-- cilogon [label = "redirect to /login w/code"];
+    browser -> ingress [label = "/login"];
+        ingress -> gafaelfawr;
+            gafaelfawr => cilogon [label = "get ID token", return = "JWT"];
+            gafaelfawr => cilogon [label = "get OpenID config",
+                                   return = "config"];
+            gafaelfawr => ldap [label = "get user data"];
+        ingress <-- gafaelfawr;
+    browser <-- ingress [label = "redirect to service"]
+    browser -> ingress;
+        ingress -> gafaelfawr [label = "auth subrequest"];
+            gafaelfawr => ldap [label = "get user data"];
+        ingress <-- gafaelfawr [label = "200"];
+        ingress => service;
+    browser <-- ingress;
+}

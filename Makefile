@@ -31,17 +31,15 @@ help:
 clean:
 	rm -rf $(BUILDDIR)/*
 
-images: _static/flow-jupyter.svg _static/general-access.png \
-	_static/science-platform.png
+images: _static/flow-jupyter.svg _static/flow-login-cilogon.svg		\
+	_static/flow-login-github.svg _static/flow-login-oidc.svg	\
+	_static/general-access.png _static/science-platform.png
 
-_static/flow-jupyter.svg: _static/flow-jupyter.diag
-	seqdiag -Tsvg _static/flow-jupyter.diag
+%.svg: %.diag
+	seqdiag -Tsvg $<
 
-_static/general-access.png: _static/general-access.py
-	python _static/general-access.py
-
-_static/science-platform.png: _static/science-platform.py
-	python _static/science-platform.py
+%.png: %.py
+	python $<
 
 html: images
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
