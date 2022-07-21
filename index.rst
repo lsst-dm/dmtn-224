@@ -232,6 +232,8 @@ Authentication flows
 For general access environments that use COmanage, this section assumes the COmanage account for the user already exists.
 If it does not, see :ref:`COmanage onboarding <comanage-onboarding>`.
 
+See the Gafaelfawr_ documentation for specific details on the ingress-nginx annotations used to protect services and the HTTP headers that are set and available to be passed down to the service after successful authentication.
+
 .. _browser-flows:
 
 Browser flows
@@ -367,79 +369,28 @@ Changes in LDAP are therefore reflected immediately in the Science Platform (aft
 
 If instead the user's identity information comes from the JWT issued by the OpenID Connect authentication process, that data is stored with the token and inherited by any other child tokens of the session token, or any user tokens created using that session token, similar to how data from GitHub is handled.
 
-.. _user-tokens:
+Token flows
+-----------
 
-User token flow
----------------
+All token authentication flows are similar, and much simpler.
+The client puts the token in an ``Authorization`` header, either with the ``bearer`` keyword (preferred) as an `RFC 6750`_ bearer token, or as either the username or password of `RFC 7617`_ HTTP Basic Authentication.
+In the latter case, whichever of the username or password that is not set to the token should be set to ``x-oauth-basic``.
 
-Implements IDM-0202.
+.. _RFC 6750: https://datatracker.ietf.org/doc/html/rfc6750
+.. _RFC 7617: https://datatracker.ietf.org/doc/html/rfc7617
 
-Users can create their own tokens and manage them via a web UI.
-Such a token can be provided via an ``Authorization`` header to authenticate to Science Platform APIs via programs or other non-browser applications.
-These tokens are called "user" tokens and are given a unique token name by the user on creation (which can be changed later).
+Gafaelfawr returns a 401 response code from the auth subrequest if no ``Authorization`` header is present, and a 403 response code if credentials are provided but not valid.
+In both cases, this is accompanied by a ``WWW-Authenticate`` challenge.
+By default, this is an `RFC 6750`_ bearer token challenge, but Gafaelfawr can be configured to return a `RFC 7617`_ HTTP Basic Authentication challenge instead (via a parameter to the ``/auth`` route, when it is configured in the ``Ingress`` as the auth subrequest handler).
 
-The metadata about the user associated with their user tokens is the same as that associated with the session token used to create the user token.
-User tokens can be limited 
+Gafaelfawr returns a 200 response code if the credentials are valid, which tells ingress-nginx to pass the request (possibly with additional headers) to the protected service.
 
-See SQR-049_ for a detailed description of user tokens and the APIs used to manage them.
-This system implements IDM-0100, IDM-0102, IDM-1307, and IDM-3000.
+The behavior of redirecting the user to log in if they are not authenticated is implemented in ingress-nginx by configuring its response to a 401 error from the auth subrequest.
+For API services that are not used by browsers, ingress-nginx should not be configured with the ``nginx.ingress.kubernetes.io/auth-signin`` annotation.
+In this case, it will return the 401 challenge to the client instead of redirecting.
 
-These tokens cannot be used to access COmanage or change any of the information stored there (IDM-0101).
-
-.. _internal-tokens:
-
-Internal tokens
----------------
-
-Implements IDM-0103.
-
-Bearer tokens, either in ``Authorization`` headers or in cookies, are used for all internal authentication insice the Science Platform.
-Many Science Platform components will need authentication credentials for the user to act on their behalf when talking to another service.
-For example, the Portal Aspect will need to make TAP queries on the user's behalf.
-However, the Portal Aspect should not have unrestricted access to authenticate as the user, only restricted access to the services that it needs to talk to.
-For example, the Portal Aspect should not be able to create a notebook as the user in the Notebook Aspect.
-
-This is done with "internal" tokens, which are created as needed and passed to services that need delegated access.
-These tokens have the same or shorter expiration time as the original token used to authenticate to the first service, and are automatically deleted when that token is deleted.
-They are restricted to the scopes required by the service.
-
-Usernames
----------
-
-When using either GitHub or the generic OpenID Connect support, the username of a user within the Science Platform will match the username asserted by GitHub or the OpenID Connect provider.
-
-When using CILogon, there is an additional level of indirection.
-Because CILogon supports federated identity, it does not itself guarantee unique usernames or necessarily map an authenticated user to a username.
-Instead, CILogon provides a unique identity URI (for example, ``http://cilogon.org/serverA/users/31388556``).
-
-The mapping of that identity to a username is handled in :ref:`COmanage <comanage-idm>`.
-That information is exposed to the Science Platform via LDAP.
-To determine the username of a newly-authenticated user, the Science Platform therefore does an LDAP lookup for a record with a ``voPersonSoRID`` matching the CILogon identity URI in the ``sub`` claim of the JWT.
-The ``uid`` attribute is the username for Science Platform purposes.
-
-User metadata in tokens
------------------------
-
-Implements IDM-1100.
-
-All Gafaelfawr authentication is done via tokens, optionally encoded inside a browser cookie.
-That token has associated data stored in Redis and possibly in a PostgreSQL database.
-Some data is associated with every token regardless of the identity management system.
-(See SQR-049_ for all the details.)
-Four pieces of data may be stored with the token or may be retrieved on the fly, depending on the identity management system:
-
-- Full name
-- Email address
-- Numeric UID
-- Group membership (group names and GIDs)
-
-When GitHub or a generic OpenID Connect provider are used as the upstream source of identity information, this information is determined during initial authentication and stored with the token.
-That information is then fixed for the lifetime of the token and will not reflect any changes in the upstream sources of data.
-
-When CILogon and COmanage are used, this information is not stored with the token.
-Instead, whenever that information is needed, it is retrieved from the COmanage LDAP server, or from a local cache of LDAP results whose lifetime should not exceed five minutes (IDM-0106, IDM-3002).
-
-In either case, the same API is used to retrieve the user metadata, and user metadata is passed via the same HTTP headers, all of which are described in SQR-049_.
+When authenticating a request with a token, Gafaelfawr does not care what type of token is pressented.
+It may be a user, notebook, internal, or service token; all of them are handled the same way.
 
 Storage
 =======
@@ -494,9 +445,16 @@ This information comes from OpenID Connect claims or from GitHub queries for inf
 - **uid**: The user's unique numeric UID
 - **groups**: The user's group membership as a list of dicts with two keys, **name** and **id** (the unique numeric GID of the group)
 
+For general access deployments, none of these fields are ever set.
+For GitHub deployments, all of these fields are set (if the data is available; in the case of naem and email, it may not be).
+For OpenID Connect deployments, whether a field is set depends on whether that field is configured to come from LDAP or to come from the OpenID Connect token claims.
+In the latter case, the information is stored with the token.
+Tokens created via the admin token API may have these fields set, in which case the values set via the admin token API override any values in LDAP, even if LDAP is configured.
+In other words, Gafaelfawr uses any data stored with the token by preference, and queries LDAP (if configured) only for data not stored with the token.
+
 The Redis key for a token is set to expire when the token expires.
 
-This JSON document is encrypted with Fernet_ using a key that is private to the authentication system.
+The token JSON document is encrypted with Fernet_ using a key that is private to the authentication system.
 This encryption prevents an attacker with access only to the Redis store, but not to the running authentication system or its secrets, from using the Redis keys to reconstruct working tokens.
 
 .. _Fernet: https://cryptography.io/en/latest/fernet/
