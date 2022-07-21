@@ -550,6 +550,8 @@ These administrators can then use the API or web interface to add additional adm
 Gafaelfawr's configuration may also include a bootstrap token.
 This token will have unlimited access to the API routes ``/auth/api/v1/admins`` and ``/auth/api/v1/tokens`` and thus can configure the administrators and create service and user tokens with any scope and any identity.
 
+Actions performed via the bootstrap token are logged with the special username ``<bootstrap>``, which is otherwise an invalid username.
+
 .. _caching:
 
 Caching
@@ -640,6 +642,18 @@ Without that caching, there would be unnecessary churn of the JupyterHub authent
 The notebook token is only injected into the lab when the lab is spawned, so it's possible for the token in a long-running lab to expire.
 If the user's overall Gafaelfawr session has expired, they will be forced to reauthenticate and their JupyterHub authentication state will then be updated via JupyterHub's authentication refresh, but the new stored token won't propagate automatically to the lab.
 This is currently an open issue, worked around by setting a timeout on labs so that the user is forced to stop and restart the lab rather than keeping the same lab running indefinitely.
+
+Portal Aspect
+-------------
+
+Similar to the Notebook Aspect, the Portal Aspect needs to make API calls on behalf of the user (most notably to the TAP and image API services).
+Unlike the Notebook Aspect, the Portal Aspect uses a regular internal token with appropriate scopes for this.
+
+In the Science-Platform-specific modifications to Firefly, the software used to create the Portal Aspect, that internal token is extracted from the ``X-Auth-Request-Token`` header and sent when appropriate in requests to other services.
+Since the Portal Aspect supports using other public TAP and image services in addition to the ones local to the Science Platform deployment in which it's running, it has to know when to send this token in an ``Authorization`` header and when to omit it.
+(We don't want to send the user's token to third-party services, since that's a breach of the user's credentials.)
+Currently, this is done via a whitelist of domains in the Science Platform deployment configuration.
+The Portal Aspect includes the token in all requests to those domains.
 
 Remaining work
 ==============
