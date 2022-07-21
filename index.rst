@@ -306,6 +306,8 @@ Note that, in the CILogon and COmanage case, user identity data is not stored wi
 Gafaelfawr retrieves it on the fly whenever it is needed (possibly via a cache).
 Changes to COmanage are therefore reflected immediately in the Science Platform (after the expiration of any cache entries).
 
+.. _github-flow:
+
 GitHub
 ^^^^^^
 
@@ -442,25 +444,164 @@ In either case, the same API is used to retrieve the user metadata, and user met
 Storage
 =======
 
+This section deals only with storage for Gafaelfawr in each Science Platform deployment.
+For the storage of identity management information for each registered user in a general access deployment, see :ref:`COmanage <comanage-idm>`.
+
+Gafaelfawr storage is divided into two, sometimes three, backend stores: a SQL database, Redis, and optionally Firestore.
+Redis is used for the token itself, including the authentication secret.
+It contains enough information to verify the authentication of a request and return the user's identity.
+The SQL database stores metadata about a user's tokens, including the list of currently valid tokens, their relationships to each other, and a history of where they have been used from.
+
+If the user's identity information doesn't come from LDAP, Redis also stores the identity information.
+
+Token format
+------------
+
+A token is of the form ``gt-<key>.<secret>``.
+The ``gt-`` part is a fixed prefix to make it easy to identify tokens, should they leak somewhere where they were not expected.
+The ``<key>`` is the Redis key under which data about the token is stored.
+The ``<secret>`` is an opaque value used to prove that the holder of the token is allowed to use it.
+Wherever the token is named, such as in UIs, only the ``<key>`` component is given, omitting the secret.
+When the token is presented for authentication, the secret provided is checked against the stored secret for that key.
+Checking the secret prevents someone who can list the keys in the Redis session store from using those keys as session handles.
+
+Redis
+-----
+
+Redis is canonical for whether a token exists and is valid.
+If a token is not found in Redis, it cannot be used to authenticate, even if it still exists in the SQL database.
+The secret portion of a token is stored only in Redis.
+
+Redis stores a key for each token except for the bootstrap token (see :ref:`Bootstrapping <bootstrapping>`).
+The Redis key is ``token:<key>`` where ``<key>`` is the key portion of the token, corresponding to the primary key of the ``token`` table.
+The value is an encrypted JSON document with the following keys:
+
+- **secret**: The corresponding secret for this token
+- **username**: The user whose authentication is represented by this token
+- **type**: The type of the token (``session``, ``user``, ``service``, etc.)
+- **service**: The service to which the token was issued (only present for internal tokens)
+- **scope**: An array of scopes
+- **created**: When the token was created (in seconds since epoch)
+- **expires**: When the token expires (in seconds since epoch)
+
+In addition, if user identity information does not come from LDAP, the following keys store identity information associated with this token.
+This information comes from OpenID Connect claims or from GitHub queries for information about the user.
+
+.. rst-class:: compact
+
+- **name**: The user's preferred full name
+- **email**: The user's email address
+- **uid**: The user's unique numeric UID
+- **groups**: The user's group membership as a list of dicts with two keys, **name** and **id** (the unique numeric GID of the group)
+
+The Redis key for a token is set to expire when the token expires.
+
+This JSON document is encrypted with Fernet_ using a key that is private to the authentication system.
+This encryption prevents an attacker with access only to the Redis store, but not to the running authentication system or its secrets, from using the Redis keys to reconstruct working tokens.
+
+.. _Fernet: https://cryptography.io/en/latest/fernet/
+
+SQL database
+------------
+
+Cloud SQL is used wherever possible, via the `Cloud SQL Auth proxy`_ running as a sidecar container in Gafaelfawr pods.
+For deployments outside of :abbr:`GCS (Google Cloud Services)`, an in-cluser PostgreSQL server deployed as part of the Science Platform is used instead.
+Authentication to the SQL server is via a password injected as a Kubernetes secret into the Gafaelfawr pods.
+
+.. _Cloud SQL auth proxy: https://cloud.google.com/sql/docs/postgres/connect-admin-proxy
+
+The SQL database stores the following data:
+
+#. Keys of all current tokens and their username, type, scope, creation and expiration date, name (for user tokens), and service (for internal tokens).
+   Any identity data stored with the token is stored only in Redis, not in the SQL database.
+#. Parent-child relationships between the tokens.
+#. History of changes (creation, revocation, expiration, modification) to tokens, including who made the change and the IP address from which it was made.
+#. List of authentication administrators, who automatically get the ``admin:token`` scope when they authenticate via a browser;
+#. History of changes to admins, including who made the change and the IP address from which it was made.
+
+Note that IP addresses are stored with history entries.
+IP addresses are personally identifiable information and may be somewhat sensitive, but are also extremely useful in debugging problems and identifying suspicious behavior.
+
+The current implementation does not redact IP addresses, but this may be reconsidered at a later stage as part of a more comprehensive look at data privacy.
+
 .. _cookie-data:
 
 Cookie data
 -----------
 
-The authentication cookie is marked ``Secure`` and ``HttpOnly`` and is encrypted in a private key of that Science Platform instance.
+Session cookies are stored in a browser cookie.
+Gafaelfawr also stores other information in that cookie to support login redirects, CSRF protection for the UI, and GitHub logout.
+
+The cookie is an encrypted JSON document with the following keys, not all of which may be present depending on the user's authentication state.
+
+.. rst-class:: compact
+
+* **token**: User's session token if they are currently authenticated.
+* **csrf**: CSRF token, required for some state-changing operations when authenticated via session token presented in a browser cookie.
+  See :ref:`CSRF protection <csrf>` for more details.
+* **github**: OAuth 2.0 token for the user obtained via GitHub authentication.
+  Used to revoke the user's OAuth App grant on logout as discussed in :ref:`GitHub browser flow <github-flow>`.
+* **return_url**: URL to which to return once the login process is complete.
+  Only set while a login is in progress.
+* **state**: Random state for the login process, used to protect against session fixation.
+  Only set while a login is in progress.
+
+The JSON document is encrypted with Fernet_ using the same key as is used for the Redis backend store.
+The resulting encrypted data is set as the ``gafaelfawr`` cookie.
+This cookie is marked ``Secure`` and ``HttpOnly``.
 
 .. _firestore:
 
 Firestore
 ---------
 
+General access Science Platform deployments use Firestore to manage UID and GID assignment, since COmanage is not well-suited for doing this.
+These assignments are stored in `Google Firestore`_, which is a NoSQL document database.
+
+.. _Google Firestore: https://cloud.google.com/firestore
+
+Gafaelfawr uses three collections.
+
+The ``users`` collection holds one document per username.
+Each document has one key, ``uid``, which stores the UID assigned to that user.
+
+The ``groups`` collection holds one document per group name.
+Each document has one key, ``gid``, which stores the GID assigned to that group.
+
+The ``counters`` collection holds three documents, ``bot-uid``, ``uid``, and ``gid``.
+Each document has one key, ``next``, which is the next unallocated UID or GID for that class of users or groups.
+They are initialized with the start of the ranges defined in DMTN-225_.
+
+If a user or group is not found, it is allocated a new UID or GID inside a transaction, linked with the update of the corresponding counter.
+If another Gafaelfawr instance allocates a UID or GID from the same space at the same time, the transaction will fail and is automatically retried.
+The ``bot-uid`` counter is used for usernames starting with ``bot-``, which is the convention for service users (as opposed to human users).
+There is no mechanism for deleting or reusing UIDs or GIDs; any unknown user or group is allocated the next sequential UID or GID, and that allocation fails if the bot UID or group GID space has been exhausted.
+
+Gafaelfawr uses workload identity to authenticate to the Firestore database.
+The Firestore database is managed in a separate GCS project dedicated to Firestore, which is a best practice for Firestore databases since it is part of App Engine and only one instance is permitted per project.
+
+.. _bootstrapping:
+
+Bootstrapping
+-------------
+
+Gafaelfawr provides a command-line utility to bootstrap a new installation of the token management system by creating the necessary database schema.
+To bootstrap administrative access, this step adds a configured list of usernames to the SQL databsae as admins.
+These administrators can then use the API or web interface to add additional administrators.
+
+Gafaelfawr's configuration may also include a bootstrap token.
+This token will have unlimited access to the API routes ``/auth/api/v1/admins`` and ``/auth/api/v1/tokens`` and thus can configure the administrators and create service and user tokens with any scope and any identity.
+
 .. _caching:
 
 Caching
 =======
 
+Token API
+=========
+
 Token UI
-========
+--------
 
 Implements IDM-0105.
 
@@ -469,6 +610,11 @@ That UI uses the user's session token for authentication and makes API calls to 
 
 Currently, the UI is implemented in React using Gatsby to package the web application, without any styling.
 In the future, we expect to move it to Next.js and integrate it with the styles and visual look of the browser interface to the Science Platform.
+
+.. _csrf:
+
+CSRF protection
+---------------
 
 Rejected alternatives
 ---------------------
