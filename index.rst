@@ -292,7 +292,7 @@ The following specific steps happen during step 5 of the :ref:`generic browser f
 
 The following specific steps happen during step 6 of the generic browser flow, in addition to the ``state`` validation and code redemption:
 
-#. Gafaelfawr retrieves the OpenID Connect configuration information for CILogon (if it is not already cached) and checks the signature on the JWT identity token.
+#. Gafaelfawr retrieves the OpenID Connect configuration information for CILogon and checks the signature on the JWT identity token.
 #. Gafaelfawr extracts the user's username from the ``username`` claim of the identity token.
    If that claim is missing, Gafaelfawr redirects the user to the enrollment flow at COmanage, which aborts the user's attempt to access whatever web page they were trying to visit.
 #. Gafaelfawr retrieves the user's UID from Firestore, assigning a new UID if necessry if that username had not been seen before.
@@ -352,7 +352,7 @@ Here is the OpenID Connect authentication flow in detail.
 
 The following specific steps happen during step 6 of the :ref:`generic browser flow <generic-browser-flow>`.
 
-#. Gafaelfawr retrieves the OpenID Connect configuration information for the OpenID Connect provider (if it is not already cached) and checks the signature on the JWT identity token.
+#. Gafaelfawr retrieves the OpenID Connect configuration information for the OpenID Connect provider and checks the signature on the JWT identity token.
 #. Gafaelfawr extracts the user's username from a claim of the identity token.
    (This is configured per OpenID Connect provider.)
 #. If LDAP is not configured, Gafaelfawr extracts the user's identity information from the JWT to store it with the session token.
@@ -391,6 +391,33 @@ In this case, it will return the 401 challenge to the client instead of redirect
 
 When authenticating a request with a token, Gafaelfawr does not care what type of token is pressented.
 It may be a user, notebook, internal, or service token; all of them are handled the same way.
+
+.. _token-reuse:
+
+Reuse of notebook and internal tokens
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A user often makes many requests to a service over a short period of time, particularly when using a browser and requesting images, JavaScript, icons, and similar resources.
+If that service needs delegated tokens (notebook or internal tokens), a naive approach would create a plethora of child tokens, causing significant performance issues.
+Gafaelfawr therefore reuses notebook and internal tokens where possible.
+
+The criterial for reusing a notebook token is:
+
+#. Same parent token
+#. Parent token expiration has not changed
+#. Parent token's scopes are still a superset of the child token's scopes
+#. Child token is still valid
+#. Child token has a remaining lifetime of at least half the normal token lifetime (or the lifetime of the parent token, whichever is shorter)
+
+To reuse an internal token, it must meet the same criteria, plus:
+
+#. Same requested child token service
+#. Same requested child token scopes
+
+If a notebook or internal token already exists that meet these criteria, that token is returned as the token to delegate to the service, rather than creating a new token.
+
+Notebook and internal tokens are also cached to avoid the SQL and Redis queries required to find a token that can be reused.
+See :ref:`Caching <caching>` for more information.
 
 Storage
 =======
@@ -556,6 +583,56 @@ Actions performed via the bootstrap token are logged with the special username `
 
 Caching
 =======
+
+In normal operation, Gafaelfawr often receives a flurry of identical authentication subrequests.
+This can happen from requent API calls, but is even more common for users using a web browser, since each request for a resource from the service (images, JavaScript, icons, etc.) triggers another auth subrequest.
+Gafaelfawr therefore must be able to answer those subrequests as quickly as possible, and should not pass that query load to backend data stores and other services that may not be able to handle that volume.
+
+This is done via caching.
+In most places where Gafaelfawr is described as retrieving information from another service, this is done through an in-memory cache.
+Gafaelfawr also caches notebook and internal tokens for a specific token to avoid creating many new internal child tokens in short succession.
+
+Gafaelfawr uses the following caches:
+
+* Caches of mappings from parent token parameters to reusable child notebook tokens and internal tokens.
+  The cache is designed to only return a token if it satisfies the criteria for :ref:`reuse of a notebook or internal token <token-reuse>`.
+  Each of these caches holds up to 5,000 entries.
+* Three caches of LDAP data if LDAP is enabled: group membership of a user (including GIDs), group membership of a user (only group names, used for scopes), and user identity information (name, email, and UID, whichever is configured to come from LDAP).
+  Each of these caches holds up to 1,000 entries, and entries are cached for at most five minutes.
+* Caches of mappings of users to UIDs and group names to GIDs, if Firestore is enabled.
+  Each of these caches holds up to 10,000 entries.
+  Since UIDs and GIDs are expected to never change once assigned, the cache entries never expire for the lifetime of the Gafaelfawr process.
+
+All of these caches are only in memory in an individual Gafaelfawr pod.
+Deployments that run multiple Gafaelfawr pods for availability and performance will therefore have separate memory caches per pod and somewhat more cache misses.
+
+Locking
+-------
+
+Gafaelfawr is, like most internal Science Platform applications, a FastAPI Python app using Python's asyncio support.
+All caches are protected by asyncio locks using the following sequence of operations:
+
+#. Without holding a lock, ask the cache if it has the required data.
+   If so, return it.
+#. Acquire a lock on the cache.
+#. Ask again if the cache has the required data, in case another thread of execution already created and stored the necessary data.
+   If so, return it.
+#. Make the external request, create the token, or otherwise acquire the data that needs to be cached.
+   If this fails, release the lock without modifying the cache and throw the resulting exception.
+#. Store the data in the cache.
+#. Release the lock on the cache.
+
+The caches of UIDs and GIDs use a simple single-level lock.
+The LDAP and token caches use a more complicated locking scheme so that a thread of execution processing a request for one user doesn't interfere with a thread of execution processing a request for a different user.
+That lock scheme works as follows:
+
+#. Acquire a lock over a dictionary of users to locks.
+#. Get the per-user lock if it already exists.
+   If not, create a new lock for this user and store it in the lock dictionary.
+#. Acquire the per-user lock.
+#. Release the lock on the dictionary of users to locks.
+
+The operation protected by the lock is then performed, and the per-user lock is released at the end of that operation.
 
 Token API
 =========
