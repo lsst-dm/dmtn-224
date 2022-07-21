@@ -523,6 +523,8 @@ In the latter case, the information is stored with the token.
 Tokens created via the admin token API may have these fields set, in which case the values set via the admin token API override any values in LDAP, even if LDAP is configured.
 In other words, Gafaelfawr uses any data stored with the token by preference, and queries LDAP (if configured) only for data not stored with the token.
 
+Child tokens and user tokens created from a token with user identity information will have that identity information copied into the data stored for the newly-created token in Redis.
+
 The Redis key for a token is set to expire when the token expires.
 
 The token JSON document is encrypted with Fernet_ using a key that is private to the authentication system.
@@ -546,6 +548,8 @@ Wherever the code is named, such as in log messages, only the ``<key>`` componen
 
 The Redis key for the code is ``oidc:<key>``, where ``<key>`` is the non-secret part of the code.
 The value is an encrypted JSON document with the following keys:
+
+.. rst-class:: compact
 
 * **code**: The full code, including the secret portion, for verification
 * **client_id**: The ID of the client that is allowed to use this authorization
@@ -709,6 +713,82 @@ The operation protected by the lock is then performed, and the per-user lock is 
 Token API
 =========
 
+Gafaelfawr is a FastAPI_ application and documents its API via OpenAPI_.
+Generated API documentation is available as part of the `Gafaelfawr documentation <https://gafaelfawr.lsst.io/>`__.
+
+.. _FastAPI: https://fastapi.tiangolo.com/
+.. _OpenAPI: https://www.openapis.org/
+
+The API is divided into two parts: routes that may be used by an individual user to manage and view their own tokens, and routes that may only be used by an administrator.
+Administrators are defined as users with authentication tokens that have the ``admin:token`` scope.
+The first set of routes can also be used by an administrator and, unlike an individual user, an administrator can specify a username other than their own.
+
+All APIs return JSON documents.
+APIs that modify state expect JSON request bodies.
+
+Errors
+------
+
+HTTP status codes are used to communicate success or failure.
+All errors will result in a 4xx or 5xx status code.
+
+All 4xx HTTP errors for which a body is reasonable return a JSON error body.
+To minimize the amount of code required on top of FastAPI_, these errors use the same conventions as the internally-generated FastAPI errors, namely:
+
+.. code-block:: json
+
+   {
+     "detail": [
+       {
+         "loc": [
+           "query",
+           "needy"
+         ],
+         "msg": "field required",
+         "type": "value_error.missing"
+      }
+    ]
+  }
+
+In other words, errors will be a JSON object with a ``details`` key, which contains a list of errors.
+Each error will have at least ``msg`` and ``type`` keys.
+``msg`` will provide a human-readable error message.
+``type`` will provide a unique identifier for the error.
+
+.. _pagination:
+
+Pagination
+----------
+
+Pagination is only used for history queries, since they may return a large number of records.
+Users are not expected to have enough active tokens to require pagination for token lists.
+
+To avoid the known problems with offset/limit pagination, such as missed entries when moving between pages, pagination for all APIs that require it is done via cursors.
+For the history tables, there is a unique ID for each row and a timestamp.
+The unique ID will normally increase with the timestamp, but may not (due to out-of-order ingestion).
+Entries are always returned sorted by timestamp.
+
+Gafaelfawr uses an approach called keyset pagination.
+When returning the first page, the results will be sorted by timestamp and then unique ID and a cursor for the next page will be included.
+That cursor will be the unique ID for the last record, an underscore, and the timestamp for that record (in seconds since epoch).
+If the client requests the next page, the server will then request entries older than or equal to that timestamp, sorted by timestamp and then by unique ID, and excluding entries with a matching timestamp and unique IDs smaller than or equal to the one in the cursor.
+This will return the next batch of results without a danger of missing any.
+
+The cursor may also begin with the letter ``p`` for links to the previous page.
+In this case, the relations in the SQL query are reversed (newer than or equal to the timestamp, unique IDs greater than or equal to the one in the cursor).
+
+The pagination links use the ``Link`` (see `RFC 8288`_) header to move around in the results, and an ``X-Total-Count`` custom header with the total number of results.
+
+.. _RFC 8288: https://tools.ietf.org/html/rfc8288
+
+Example headers for a paginated result::
+
+    Link: <https://example.org/auth/api/v1/history/token-auth?limit=100&cursor=345_1601415205>; rel="next"
+    X-Total-Count: 547
+
+Links of type ``next``, ``prev``, and ``first`` will be included.
+``last`` is not implemented.
+
 Token UI
 --------
 
@@ -725,12 +805,16 @@ In the future, we expect to move it to Next.js and integrate it with the styles 
 CSRF protection
 ---------------
 
-Rejected alternatives
----------------------
+API calls may be authenticated one of two ways: by providing a token in an ``Authorization`` header with type ``bearer``, or by sending a session cookie.
+The session cookie method is used by the token UI.
+Direct API calls will use the ``Authorization`` header.
 
-We considered serving the token UI using server-rendered HTML and a separate interface from the API, but decided against it for two reasons.
-First, having all changes made through the API (whether by API calls or via JavaScript) ensures that the API always has parity with the UI, ensures that every operation can be done via an API, and avoids duplicating some frontend code.
-Second, other Rubin-developed components of the Science Platform are using JavaScript with a common style dictionary to design APIs, so building the token UI using similar tools will make it easier to maintain a standard look and feel.
+All API ``POST``, ``PATCH``, or ``DELETE`` calls authenticated via session cookie must include an ``X-CSRF-Token`` header in the request.
+The value of this header is obtained via a login route, used by the token UI.
+This value will be checked by the server against the CSRF token included in the user's session cookie.
+Direct API calls authenticating with the ``Authorization`` header can ignore this requirement, since cross-site state-changing requests containing an ``Authorization`` header and a JSON payload are blocked by the web security model.
+
+Cross-origin requests are not supported, and therefore the token API responds with an error to ``OPTIONS`` requests.
 
 Specific services
 =================
