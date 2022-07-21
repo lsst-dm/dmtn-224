@@ -1,0 +1,17 @@
+seqdiag {
+    browser -> ingress;
+        ingress => service [return = "redirect to /auth/openid/login"];
+    browser <-- ingress [return = "redirect to /auth/openid/login"];
+    browser -> ingress;
+        ingress => gafaelfawr [label = "/auth/openid/login",
+                               return = "redirect to service"];
+    browser <-- ingress [label = "return to service"];
+    browser -> ingress;
+        ingress -> service;
+            service => gafaelfawr [label = "/auth/openid/token",
+                                   return = "JWT"];
+            service => gafaelfawr [label = "/auth/userinfo",
+                                   return = "user data"];
+        ingress <-- service [label = "service page"];
+    browser <-- ingress [label = "service page"];
+}

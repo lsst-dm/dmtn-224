@@ -395,7 +395,7 @@ It may be a user, notebook, internal, or service token; all of them are handled 
 .. _token-reuse:
 
 Reuse of notebook and internal tokens
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------------------
 
 A user often makes many requests to a service over a short period of time, particularly when using a browser and requesting images, JavaScript, icons, and similar resources.
 If that service needs delegated tokens (notebook or internal tokens), a naive approach would create a plethora of child tokens, causing significant performance issues.
@@ -419,6 +419,48 @@ If a notebook or internal token already exists that meet these criteria, that to
 Notebook and internal tokens are also cached to avoid the SQL and Redis queries required to find a token that can be reused.
 See :ref:`Caching <caching>` for more information.
 
+.. _oidc-flow:
+
+OpenID Connect flow
+-------------------
+
+Some services deployed on the Science Platform (such as Chronograf_) want to do their own authentication using an upstream OpenID Connect provider and don't have a mechanism to rely on authentication performed by ingress-nginx.
+To support those applications, Gafaelfawr can also service as a simple OpenID Connect provider for other services in the same Science Platform.
+
+.. _Chronograf: https://www.influxdata.com/time-series-platform/chronograf/
+
+Here is the flow using Gafaelfawr's OpenID Connect provider.
+
+.. figure:: /_static/flow-oidc.svg
+   :name: Gafaelfawr OpenID Connect flow
+
+   Sequence diagram of the authentication flow using the Gafaelfawr OpenID Connect provider.
+   This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (see :ref:`Browser flows <browser-flows>`).
+
+In detail:
+
+#. The user goes to an service that uses Gafaelfawr as an OpenID Connect authentication provider.
+#. The service redirects the user to ``/auth/openid/login`` with some additional parameters in the URL including the registered client ID and an opaque state parameter.
+#. If the user is not already authenticated, Gafaelfawr authenticates the user using the :ref:`normal browser flow <browser-flows>`, sending the user back to the same ``/auth/openid/login`` URL once that authentication has completed.
+#. Gafaelfawr validates the login request and then redirects the user back to the protected service, including an authorization code in the URL.
+#. The protected service presents that authorization code to ``/auth/openid/token``.
+#. Gafaelfawr validates that code and returns a JWT representing the user to the protected service.
+   That JWT has a hard-coded scope of ``openid``.
+#. The protected service should validate the signature on the JWT by retrieving metadata about the signing key from ``/.well-known/openid-configuration`` and ``/.well-known/jwks.json``, which are also served by Gafaelfawr.
+#. The protected service optionally authenticates as the user to ``/auth/userinfo``, using that JWT as a bearer token, and retrieves metadata about the authenticated user.
+   Alternately, the protected service can read information directly from the JWT claims.
+
+This is the OpenID Connect authorization code flow.
+See the `OpenID Connect specification <https://openid.net/specs/openid-connect-core-1_0.html>`__ for more information.
+
+In order to use the OpenID Connect authentication flow, a service has to have a client ID and secret.
+The list of valid client IDs and secrets for a given deployment are stored as part of the Gafaelfawr secret.
+The OpenID Connect relying party presents the client ID and secret as part of the request to redeem a code for a token.
+
+The authorization codes Gafaelfawr returns as part of this OpenID Connect authentication flow are stored in :ref:`Redis <redis-oidc>`.
+
+The JWTs issued by the OpenID Connect authentication are unrelated to the tokens used elsewhere in the Science Platform and cannot be used to authenticate to services protected by the normal token and browser authentication flows.
+
 Storage
 =======
 
@@ -431,6 +473,8 @@ It contains enough information to verify the authentication of a request and ret
 The SQL database stores metadata about a user's tokens, including the list of currently valid tokens, their relationships to each other, and a history of where they have been used from.
 
 If the user's identity information doesn't come from LDAP, Redis also stores the identity information.
+
+.. _token-format:
 
 Token format
 ------------
@@ -485,6 +529,34 @@ The token JSON document is encrypted with Fernet_ using a key that is private to
 This encryption prevents an attacker with access only to the Redis store, but not to the running authentication system or its secrets, from using the Redis keys to reconstruct working tokens.
 
 .. _Fernet: https://cryptography.io/en/latest/fernet/
+
+.. _redis-oidc:
+
+OpenID Connect codes
+^^^^^^^^^^^^^^^^^^^^
+
+As part of the :ref:`internal OpenID Connect flow <oidc-flow>`, Gafaelfawr has to issue an authentication code that can be redeemed later for a JWT.
+These codes are also stored in Redis.
+
+The code itself uses the same format as a :ref:`token <token-format>`, except it starts with ``gc-`` instead of ``gt-``.
+It has the form ``gc-<key>.<secret>``.
+The ``<key>`` is the Redis key under which data for the code is stored.
+The ``<secret>`` is an opaque value used to prove that the holder of the code is allowed to use it.
+Wherever the code is named, such as in log messages, only the ``<key>`` component is given, omitting the secret.
+
+The Redis key for the code is ``oidc:<key>``, where ``<key>`` is the non-secret part of the code.
+The value is an encrypted JSON document with the following keys:
+
+* **code**: The full code, including the secret portion, for verification
+* **client_id**: The ID of the client that is allowed to use this authorization
+* **redirect_url**: URL to which to redirect the user after authentication
+* **token**: The underlying session token for the user
+* **created_at**: When the code was issued
+
+The Redis key is set to expire in one hour, which is the length of time for which the code is valid.
+Codes are not stored anywhere else, so once they expire or are redeemed, they are permanently deleted.
+
+The code JSON document is encrypted with Fernet_ in exactly the same way that token information is encrypted.
 
 SQL database
 ------------
