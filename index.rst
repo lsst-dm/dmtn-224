@@ -124,6 +124,8 @@ They will be required to confirm that they can receive email at the email addres
 The choice of username is subject to constraints specified in DMTN-225_.
 The user's COmanage account will then be created in a pending state, and must be approved by an authorized approver before it becomes active and is provisioned in LDAP (and thus allows access to the Science Platform).
 
+The web pages shown during this onboarding flow are controlled by the style information in the `lsst-registry-landing <https://github.com/cilogon/lsst-registry-landing>`__ project on GitHub.
+
 Approvers are notified via email by COmanage that a new user is awaiting approval.
 Approval will be based on the institutional affiliation information collected by COmanage from the identity information released by the user's identity provider via CILogon.
 Approvers may have to reach out to the prospective user or their institution to gather additional information before deciding whether the user has data rights.
