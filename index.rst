@@ -512,12 +512,19 @@ In detail:
 #. The protected service optionally authenticates as the user to ``/auth/userinfo``, using that JWT as a bearer token, and retrieves metadata about the authenticated user.
    Alternately, the protected service can read information directly from the JWT claims.
 
-This is the OpenID Connect authorization code flow.
-See the `OpenID Connect specification <https://openid.net/specs/openid-connect-core-1_0.html>`__ for more information.
-
 In order to use the OpenID Connect authentication flow, a service has to have a client ID and secret.
 The list of valid client IDs and secrets for a given deployment are stored as a JSON blob in the Gafaelfawr secret.
 The OpenID Connect relying party presents the client ID and secret as part of the request to redeem a code for a token.
+
+This is the OpenID Connect authorization code flow.
+See the `OpenID Connect specification <https://openid.net/specs/openid-connect-core-1_0.html>`__ for more information.
+This implementation has the following protocol limitations:
+
+.. rst-class:: compact
+
+- Only the authorization code flow is supported.
+- Only the ``openid`` scope is supported in the client request.
+- The client must authenticate by sending a ``client_secret`` parameter in the request to the token endpoint.
 
 The authorization codes Gafaelfawr returns as part of this OpenID Connect authentication flow are stored in :ref:`Redis <redis-oidc>`.
 
