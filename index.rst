@@ -526,6 +526,78 @@ The JWTs issued by the OpenID Connect authentication are unrelated to the tokens
 Gafaelfawr does no scope or other authorization checks when doing OpenID Connect authentication.
 All checks are left to the application that initiates the authentication.
 
+Specific services
+=================
+
+The general pattern for protecting a service with authentication and access control is configure its ``Ingress`` resources with the necessary ingress-nginx annotations and then let Gafaelfawr do the work.
+If the service needs information about the user, it obtains that from the ``X-Auth-Request-*`` headers that are set by Gafaelfawr via ingress-nginx.
+However, some Science Platform services require additional special attention.
+
+Notebook Aspect
+---------------
+
+JupyterHub supports an external authentication provider, but then turns that authentication into an internal session that is used to authenticate and authorize subsequent actions by the user.
+This session is normally represented by a cookie JupyterHub sets in the browser.
+JupyterHub also supports bearer tokens, with the wrinkle that JupyterHub requires using the ``token`` keyword instead of ``bearer`` in the ``Authorization`` header.
+
+JupyterHub then acts as an OAuth authentication provider to authenticate the user to any spawned lab.
+The lab obtains an OAuth token for the user from the hub and uses that for subsequent authentication to the lab.
+
+The JupyterHub authentication session can include state, which is stored in the JupyterHub session database.
+In the current Science Platform implementation, that session database is stored in a PostgreSQL server also run inside the same Kubernetes cluster, protected by password authentication with a password injected into the JupyterHub pod.
+The data stored in the authentication session is additionally encrypted with a key known only to JupyterHub.
+
+The ingress for JupyterHub is configured to require Gafaelfawr authentication and access control for all JupyterHub and lab URLs.
+Therefore, regardless of what JupyterHub and the lab think is the state of the user's authentication, the request is not allowed to reach them unless the user is already authenticated, and any redirects to the upstream identity provider are handled before JupyterHub ever receives a request.
+The user is also automatically redirected to the upstream identity provider to reauthenticate if their credentials expire while using JupyterHub.
+The ingress configuration requests a delegated notebook token.
+
+Gafaelfawr is then integrated into JupyterHub with a custom JupyterHub authentication provider.
+That provider runs inside the context of a request to JupyterHub that requires authentication.
+It registers a custom route (``/gafaelfawr/login`` in the Hub's route namespace) and returns it as a login URL.
+That custom route reads the headers from the incoming request, which are set by Gafaelfawr, to find the delegated notebook token, and makes an API call to Gafaelfawr using that token for authentication to obtain the user's identity information.
+That identity information along with the token are then stored as the JupyterHub authentication session state.
+Information from the authentication session state is used when spawning a user lab to control the user's UID, groups, and other information required by the lab, and the notebook token is injected into the lab so that it will be available to the user.
+
+.. figure:: /_static/flow-jupyter.svg
+   :name: JupyterHub and lab authentication flow
+
+   Sequence diagram of the authentication flow between Gafaelfawr, JupyterHub, and the lab.
+   This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (see :ref:`Browser flows <browser-flows>`).
+
+Because JupyterHub has its own authentication session that has to be linked to the Gafaelfawr authentication session, there are a few wrinkles here that require special attention.
+
+- When the user reauthenticates (because, for example, their credentials have expired), their JupyterHub session state needs to be refreshed even if JupyterHub thinks their existing session is still valid.
+  Otherwise, JupyterHub will hold on to the old token and continue injecting it into labs, where it won't work and cause problems for the user.
+  JupyterHub is therefore configured to force an authentication refresh before spawning a lab (which is when the token is injected), and the authentication refresh checks the delegated token provided in the request headers to see if it's the same token stored in the authentication state.
+  If it is not, the authentication state is refreshed from the headers of the current request.
+
+- The user's lab may make calls to JupyterHub on the user's behalf.
+  Since the lab doesn't know anything about the Gafaelfawr token, those calls are authenticated using the lab's internal credentials.
+  These must not be rejected by the authentication refresh logic, or the lab will not be allowed to talk to JupyterHub.
+
+  Since all external JupyterHub routes are protected by Gafaelfawr and configured to provide a notebook token, the refresh header can check for the existence of an ``X-Auth-Request-Token`` header set by Gafaelfawr.
+  If that header is not present, the refresh logic assumes that the request is internal and defers to JupyterHub's own authentication checks without also applying the Gafaelfawr authentication integration.
+
+Note that this implementation approach depends on Gafaelfawr reusing an existing notebook token if one already exists.
+Without that caching, there would be unnecessary churn of the JupyterHub authentication state.
+
+The notebook token is only injected into the lab when the lab is spawned, so it's possible for the token in a long-running lab to expire.
+If the user's overall Gafaelfawr session has expired, they will be forced to reauthenticate and their JupyterHub authentication state will then be updated via JupyterHub's authentication refresh, but the new stored token won't propagate automatically to the lab.
+This is currently an open issue, worked around by setting a timeout on labs so that the user is forced to stop and restart the lab rather than keeping the same lab running indefinitely.
+
+Portal Aspect
+-------------
+
+Similar to the Notebook Aspect, the Portal Aspect needs to make API calls on behalf of the user (most notably to the TAP and image API services).
+Unlike the Notebook Aspect, the Portal Aspect uses a regular internal token with appropriate scopes for this.
+
+In the Science-Platform-specific modifications to Firefly, the software used to create the Portal Aspect, that internal token is extracted from the ``X-Auth-Request-Token`` header and sent when appropriate in requests to other services.
+Since the Portal Aspect supports using other public TAP and image services in addition to the ones local to the Science Platform deployment in which it's running, it has to know when to send this token in an ``Authorization`` header and when to omit it.
+(We don't want to send the user's token to third-party services, since that's a breach of the user's credentials.)
+Currently, this is done via a whitelist of domains in the Science Platform deployment configuration.
+The Portal Aspect includes the token in all requests to those domains.
+
 Storage
 =======
 
@@ -937,77 +1009,102 @@ Direct API calls authenticating with the ``Authorization`` header can ignore thi
 
 Cross-origin requests are not supported, and therefore the token API responds with an error to ``OPTIONS`` requests.
 
-Specific services
-=================
+Logging
+=======
 
-The general pattern for protecting a service with authentication and access control is configure its ``Ingress`` resources with the necessary ingress-nginx annotations and then let Gafaelfawr do the work.
-If the service needs information about the user, it obtains that from the ``X-Auth-Request-*`` headers that are set by Gafaelfawr via ingress-nginx.
-However, some Science Platform services require additional special attention.
+Gafaelfawr uses structlog_ (via Safir_) to log all its internal messages in JSON.
+It is run via uvicorn_, which also logs all requests in the standard Apache log format.
+Interesting events that are not obvious from the access logging done by uvicorn are logged at the ``INFO`` level.
+User errors are logged at the ``WARNING`` level.
+Gafaelfawr or other identity management errors are logged at the ``ERROR`` level.
 
-Notebook Aspect
----------------
+.. _Safir: https://safir.lsst.io/
+.. _structlog: https://www.structlog.org/en/stable/
+.. _uvicorn: https://www.uvicorn.org/
 
-JupyterHub supports an external authentication provider, but then turns that authentication into an internal session that is used to authenticate and authorize subsequent actions by the user.
-This session is normally represented by a cookie JupyterHub sets in the browser.
-JupyterHub also supports bearer tokens, with the wrinkle that JupyterHub requires using the ``token`` keyword instead of ``bearer`` in the ``Authorization`` header.
+Log attributes
+--------------
 
-JupyterHub then acts as an OAuth authentication provider to authenticate the user to any spawned lab.
-The lab obtains an OAuth token for the user from the hub and uses that for subsequent authentication to the lab.
+The main log message will be in the ``event`` attribute of each log message.
+If this message indicates an error with supplemental information, the additional details of the error will be in the ``error`` attribute.
 
-The JupyterHub authentication session can include state, which is stored in the JupyterHub session database.
-In the current Science Platform implementation, that session database is stored in a PostgreSQL server also run inside the same Kubernetes cluster, protected by password authentication with a password injected into the JupyterHub pod.
-The data stored in the authentication session is additionally encrypted with a key known only to JupyterHub.
+Gafaelfawr will add some consistent attributes log messages, in addition to the default attributes `added by Safir <https://safir.lsst.io/logging.html>`__.
+All authenticated routes add the following attributes once the user's token has been located and verified:
 
-The ingress for JupyterHub is configured to require Gafaelfawr authentication and access control for all JupyterHub and lab URLs.
-Therefore, regardless of what JupyterHub and the lab think is the state of the user's authentication, the request is not allowed to reach them unless the user is already authenticated, and any redirects to the upstream identity provider are handled before JupyterHub ever receives a request.
-The user is also automatically redirected to the upstream identity provider to reauthenticate if their credentials expire while using JupyterHub.
-The ingress configuration requests a delegated notebook token.
+``scope``
+    The scopes of the authentication token.
 
-Gafaelfawr is then integrated into JupyterHub with a custom JupyterHub authentication provider.
-That provider runs inside the context of a request to JupyterHub that requires authentication.
-It registers a custom route (``/gafaelfawr/login`` in the Hub's route namespace) and returns it as a login URL.
-That custom route reads the headers from the incoming request, which are set by Gafaelfawr, to find the delegated notebook token, and makes an API call to Gafaelfawr using that token for authentication to obtain the user's identity information.
-That identity information along with the token are then stored as the JupyterHub authentication session state.
-Information from the authentication session state is used when spawning a user lab to control the user's UID, groups, and other information required by the lab, and the notebook token is injected into the lab so that it will be available to the user.
+``token``
+    The key of the authentication token.
 
-.. figure:: /_static/flow-jupyter.svg
-   :name: JupyterHub and lab authentication flow
+``token_source``
+    Where the token was found.
+    Chosen from ``cookie`` (found in the session cookie), ``bearer`` (provided as a bearer token in an ``Authorization`` header), or ``basic-username`` or ``basic-password`` (provided as the username or password in an HTTP Basic ``Authorization`` header).
 
-   Sequence diagram of the authentication flow between Gafaelfawr, JupyterHub, and the lab.
-   This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (see :ref:`Browser flows <browser-flows>`).
+``user``
+    The username of the token.
 
-Because JupyterHub has its own authentication session that has to be linked to the Gafaelfawr authentication session, there are a few wrinkles here that require special attention.
+The ``/auth`` route adds the following attributes:
 
-- When the user reauthenticates (because, for example, their credentials have expired), their JupyterHub session state needs to be refreshed even if JupyterHub thinks their existing session is still valid.
-  Otherwise, JupyterHub will hold on to the old token and continue injecting it into labs, where it won't work and cause problems for the user.
-  JupyterHub is therefore configured to force an authentication refresh before spawning a lab (which is when the token is injected), and the authentication refresh checks the delegated token provided in the request headers to see if it's the same token stored in the authentication state.
-  If it is not, the authentication state is refreshed from the headers of the current request.
+``auth_uri``
+    The URL being authenticated.
+    This is the URL (withough the scheme and host) of the original request that Gafaelfawr is being asked to authenticate via a subrequest.
+    This will be ``NONE`` if the request was made directly to the ``/auth`` endpoint (which should not happen in normal usage, but may happen during testing).
 
-- The user's lab may make calls to JupyterHub on the user's behalf.
-  Since the lab doesn't know anything about the Gafaelfawr token, those calls are authenticated using the lab's internal credentials.
-  These must not be rejected by the authentication refresh logic, or the lab will not be allowed to talk to JupyterHub.
+``required_scope``
+    The list of scopes required, taken from the ``scope`` query parameter
 
-  Since all external JupyterHub routes are protected by Gafaelfawr and configured to provide a notebook token, the refresh header can check for the existence of an ``X-Auth-Request-Token`` header set by Gafaelfawr.
-  If that header is not present, the refresh logic assumes that the request is internal and defers to JupyterHub's own authentication checks without also applying the Gafaelfawr authentication integration.
+``satisfy``
+    The authorization strategy, taken from the ``satisfy`` query parameter.
 
-Note that this implementation approach depends on Gafaelfawr reusing an existing notebook token if one already exists.
-Without that caching, there would be unnecessary churn of the JupyterHub authentication state.
+The ``/login`` route adds the following attributes:
 
-The notebook token is only injected into the lab when the lab is spawned, so it's possible for the token in a long-running lab to expire.
-If the user's overall Gafaelfawr session has expired, they will be forced to reauthenticate and their JupyterHub authentication state will then be updated via JupyterHub's authentication refresh, but the new stored token won't propagate automatically to the lab.
-This is currently an open issue, worked around by setting a timeout on labs so that the user is forced to stop and restart the lab rather than keeping the same lab running indefinitely.
+``return_url``
+    The URL to which the user will be sent after successful authentication.
 
-Portal Aspect
--------------
+Some actions will add additional structured data appropriate to that action.
 
-Similar to the Notebook Aspect, the Portal Aspect needs to make API calls on behalf of the user (most notably to the TAP and image API services).
-Unlike the Notebook Aspect, the Portal Aspect uses a regular internal token with appropriate scopes for this.
+.. _client-ips:
 
-In the Science-Platform-specific modifications to Firefly, the software used to create the Portal Aspect, that internal token is extracted from the ``X-Auth-Request-Token`` header and sent when appropriate in requests to other services.
-Since the Portal Aspect supports using other public TAP and image services in addition to the ones local to the Science Platform deployment in which it's running, it has to know when to send this token in an ``Authorization`` header and when to omit it.
-(We don't want to send the user's token to third-party services, since that's a breach of the user's credentials.)
-Currently, this is done via a whitelist of domains in the Science Platform deployment configuration.
-The Portal Aspect includes the token in all requests to those domains.
+Client IP addresses
+-------------------
+
+Since it is running as either an auth request subhandler or as a service behind a Kubernetes ingress, Gafaelfawr is always running behind a proxy server and does not see the actual IP address of the client.
+It will attempt to analyze the ``X-Forwarded-For`` HTTP header to determine the client IP address as determined by the proxy server.
+(It does not attempt to log the client hostname.)
+
+For this to work properly, ingress-nginx must be configured to generate full, chained ``X-Forwarded-For`` headers.
+This is done by adding the following to the ``ConfigMap`` for ingress-nginx.
+
+.. code-block:: yaml
+
+   data:
+     compute-full-forwarded-for: "true"
+     use-forwarded-headers: "true"
+
+See the `NGINX Ingress Controller documentation <https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/>`__ for more details.
+This workaround would no longer be needed if `this feature request for the NGINX ingress were implemented <https://github.com/kubernetes/ingress-nginx/issues/5547>`__.
+
+Kubernetes source IP NAT for ingress-nginx must also be disabled.
+Do this by adding ``spec.externalTrafficPolicy`` to ``Local`` in the ``Service`` resource definition for the NGINX ingress controller.
+This comes with some caveats and drawbacks.
+See `this Medium post <https://medium.com/pablo-perez/k8s-externaltrafficpolicy-local-or-cluster-40b259a19404>`__ for more details.
+
+For the curious, here are the details of why these changes are required.
+
+Determining the client IP from ``X-Forwarded-For`` is complicated because Gafaelfawr's ``/auth`` route is called via an NGINX ``auth_request`` directive.
+In the Kubernetes NGINX ingress, this involves three layers of configuration.
+The protected service will have an ``auth_request`` directive that points to a generated internal location.
+That internal location will set ``X-Forwarded-For`` and then proxy to the ``/auth`` route.
+The ``/auth`` route configuration is itself a proxy that also sets ``X-Forwarded-For`` and then proxies the request to Gafaelfawr.
+Because of this three-layer configuration, if NGINX is configured to always replace the ``X-Forwarded-For`` header, Gafaelfawr will receive a header containing only the IP address of the NGINX ingress.
+
+The above configuration tells the NGINX ingress to instead retain the original ``X-Forwarded-For`` and append each subsequent client IP.
+Gafaelfawr can then be configured to know which entries in that list to ignore when walking backwards to find the true client IP.
+
+Unfortunately, this still doesn't work if Kubernetes replaces the original client IP using source NAT before the NGINX ingress ever sees it.
+Therefore, source NAT also has to be disabled for inbound connections to the NGINX ingress.
+That's done with the ``externalTrafficPolicy`` setting described above.
 
 .. _references:
 
