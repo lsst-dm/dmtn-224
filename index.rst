@@ -397,6 +397,9 @@ In this case, it will return the 401 challenge to the client instead of redirect
 When authenticating a request with a token, Gafaelfawr does not care what type of token is pressented.
 It may be a user, notebook, internal, or service token; all of them are handled the same way.
 
+Service tokens, used for service-to-service API calls unrelated to a specific user request, are managed as Kubernetes secrets via a Kubernetes custom resource.
+For more details, see :ref:`GafaelfawrServiceToken <gafaelfawrservicetoken>`.
+
 .. _token-reuse:
 
 Reuse of notebook and internal tokens
@@ -714,6 +717,54 @@ That lock scheme works as follows:
 #. Release the lock on the dictionary of users to locks.
 
 The operation protected by the lock is then performed, and the per-user lock is released at the end of that operation.
+
+.. _kubernetes:
+
+Kubernetes resources
+====================
+
+Gafaelfawr also runs a Kubernetes controller that maintains some Kubernetes resources for Science Platform services.
+
+.. _gafaelfawrservicetoken:
+
+GafaelfawrServiceToken
+----------------------
+
+Normally, protected services will request a delegated token on behalf of the user and make other API calls using that token.
+However, in some cases services will need to make calls on their own behalf.
+Examples include administrative services for user provisioning, monitoring systems that need to forge user tokens to test as a user, and internal systems that are easier to deploy as individual microservices that need to authenticate to each other.
+This is done via service tokens.
+
+Service tokens are requested via a ``GafaelfawrServiceToken`` custom Kubernetes resource.
+That resource looks like the following:
+
+.. code-block:: yaml
+
+   apiVersion: gafaelfawr.lsst.io/v1alpha1
+   kind: GafaelfawrServiceToken
+   metadata:
+     name: <name>
+     namespace: <namespace>
+   spec:
+     service: bot-<service-name>
+     scopes:
+       - <scope-1>
+       - <scope-2>
+
+This requests a service token be created with the username ``bot-<service-name>`` and havig scopes ``<scope-1>`` and ``<scope-2>``.
+(All service token usernames must start with ``bot-``.)
+
+This service token will be stored in a Kubernetes ``Secret`` resource with the same name and in the same namespace as the ``GafaelfawrServiceToken`` resource.
+That secret will have one ``data`` element, ``token``, which will contain a valid Gafaelfawr service token with the properties described in the ``spec`` section of the ``GafaelfawrServiceToken`` resource.
+Any labels or annotations on the ``GafaelfawrServiceToken`` resource will be copied to the created ``Secret`` resource.
+The ``Secret`` will be marked as owned by the ``GafaelfawrServiceToken`` resource, so it will be automatically deleted by Kubernetes if the parent resource is deleted.
+
+Gafaelfawr will watch for any modifications to the ``GafaelfawrServiceToken`` resource and update the ``Secret`` resource accordingly.
+On startup, it will also check all ``Secret`` resources associated with ``GafaelfawrServiceToken`` resources and ensure that the tokens are still valid.
+(They could become invalid if, say, the Redis store for Gafaelfawr was reset.)
+
+Due to limitations in the current design of this Kubernetes controller, Gafaelfawr will not notice changes to the generated ``Secret`` resource, such as its deletion.
+It will only react to changes to the ``GafaelfawrServiceToken`` resource.
 
 Token API
 =========
