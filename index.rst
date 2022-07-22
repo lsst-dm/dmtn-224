@@ -888,44 +888,6 @@ Since the Portal Aspect supports using other public TAP and image services in ad
 Currently, this is done via a whitelist of domains in the Science Platform deployment configuration.
 The Portal Aspect includes the token in all requests to those domains.
 
-Remaining work
-==============
-
-The following portions of the described implementation are not yet complete.
-
-- Force two-factor authentication for administrators (IDM-0007)
-- Force reauthentication to provide an affiliation (IDM-0009)
-- Changing usernames (IDM-0012)
-- Handling duplicate email addresses (IDM-0013)
-- Disallow authentication from pending or frozen accounts (IDM-0107)
-- Logging of COmanage changes to users (IDM-0200)
-- Logging of authentications via Kafka to the auth history table (IDM-0203)
-- Authentication history per federated identity (IDM-0204)
-- Last used time of user tokens (IDM-0205)
-- Email notification of federated identity and user token changes (IDM-0206)
-- Freezing accounts (IDM-1001)
-- Deleting accounts (IDM-1002)
-- Setting an expiration date on an account (IDM-1003, IDM-1301)
-- Notifying users of upcoming account expiration (IDM-1004)
-- Notifying users about email address changes (IDM-1101)
-- User class markers (IDM-1103, IDM-1310)
-- Quotas (IDM-1200, IDM-1201, IDM-1202, IDM-1203, IDM-1303, IDM-1401, IDM-1402, IDM-2100, IDM-2101, IDM-2102, IDM-2103, IDM-2201, IDM-3003)
-- Administrator verification of email addresses (IDM-1302)
-- User impersonation (IDM-1304, IDM-1305, IDM-2202)
-- Review newly-created accounts (IDM-1309)
-- Merging accounts (IDM-1311)
-- Logging of administrative actions tagged appropriately (IDM-1400, IDM-1403, IDM-1404)
-- Affiliation-based groups (IDM-2001)
-- Group name restrictions (IDM-2004)
-- Expiration of group membership (IDM-2005)
-- Group renaming while preserving GID (IDM-2006)
-- Correct handling of group deletion (IDM-2007)
-- Groups owned by other groups (IDM-2009)
-- Logging of group changes (IDM-2300, IDM-2301, IDM-2302, IDM-2303, IDM-2304, IDM-2305, IDM-4002)
-- API to COmanage (IDM-3001)
-- Scale testing (IDM-4000)
-- Scaling of group membership (IDM-4001)
-
 .. _references:
 
 References
