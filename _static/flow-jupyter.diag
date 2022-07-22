@@ -1,0 +1,30 @@
+seqdiag {
+    default_fontsize = 14;
+
+    browser -> ingress;
+        ingress => gafaelfawr [label = "auth subrequest", return = "200"];
+        ingress -> jupyterhub;
+    browser <-- ingress <-- jupyterhub [label = "redirect to auth"];
+    browser -> ingress;
+        ingress => gafaelfawr [label = "auth subrequest", return = "200"];
+        ingress -> jupyterhub [label = "/gafaelfawr/login"];
+        jupyterhub => gafaelfawr [label = "userinfo", return = "identity data"];
+
+    === JupyterHub spawns lab ===
+
+    browser <-- ingress <-- jupyterhub [label = "redirect to lab"];
+    browser -> ingress;
+        ingress => gafaelfawr [label = "auth subrequest", return = "200"];
+        ingress => lab [return = "redirect to auth"];
+    browser <-- ingress [label = "redirect to auth"];
+    browser -> ingress [label = "OAuth"];
+        ingress => gafaelfawr [label = "auth subrequest", return = "200"];
+        ingress => jupyterhub [label = "OAuth", return = "redirect to lab"];
+    browser <-- ingress [label = "redirect to lab"];
+    browser -> ingress;
+        ingress => gafaelfawr [label = "auth subrequest", return = "200"];
+        ingress -> lab;
+          lab => jupyterhub [label = "OAuth"];
+        ingress <-- lab;
+    browser <-- ingress;
+}

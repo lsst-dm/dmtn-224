@@ -14,7 +14,7 @@ RSP identity management implementation strategy
 DMTN-224
 ========
 
-The identity management system for the Rubin Science Platform registers and authenticates users, maintains their group membership and other associated permissions such as quotas, and answers authorization questions from other Science Platform services. This document describes the implementation strategy and choices for the identity management system.
+Describes the technical implementation details the identity management, authentication, and authorization system of the Rebin Science Platform.
 
 **Links:**
 
