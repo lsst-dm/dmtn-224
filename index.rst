@@ -1224,7 +1224,7 @@ DMTN-116_
     Original implementation strategy for the identity management system, now superseded and of historical interest only.
 
 SQR-039_
-    Problem statement and proposed redesign for the identity management system.
+    Problem statement and proposed redesign for the identity management system, which led (with numerous modifications) to the current design.
     This document contains a detailed discussion of the decision not to use :abbr:`JWTs (JSON Web Tokens)` in the authentication system, and to keep authorization information such as group credentials out of the authentication tokens.
 
 SQR-069_
