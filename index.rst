@@ -1029,8 +1029,9 @@ SQR-044_
     This document is now incomplete and partly out of date, but still provides useful detail of requirements that have not yet been incorporated into the design.
 
 SQR-049_
-    Detailed design of the token management system for the Science Platform, including its API and storage model.
-    Not all of the elements of this design have been implemented, and some of them may be modified before implementation.
+    Original design of the token management system for the Science Platform, including its API and storage model.
+    This has now been partly superseded by this document, and the API description there has been superseded by the API described in the Gafaelfawr_ documentation.
+    However, it remains the working specification for tracking authentication history and logging to Kafka, which have not yet been implemented.
 
 .. _DMTN-225: https://dmtn-225.lsst.io/
 .. _DMTN-234: https://dmtn-225.lsst.io/
@@ -1051,6 +1052,9 @@ SQR-051_
 
 Implementation details
 ----------------------
+
+The tech note you are reading is the primary document for the implementation details of the Science Platform.
+Other implementation tech notes are:
 
 DMTN-235_
     Lists the token scopes used by the identity management system, defines them, and documents the services to which they grant access.
