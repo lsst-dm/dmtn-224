@@ -462,12 +462,15 @@ This is the OpenID Connect authorization code flow.
 See the `OpenID Connect specification <https://openid.net/specs/openid-connect-core-1_0.html>`__ for more information.
 
 In order to use the OpenID Connect authentication flow, a service has to have a client ID and secret.
-The list of valid client IDs and secrets for a given deployment are stored as part of the Gafaelfawr secret.
+The list of valid client IDs and secrets for a given deployment are stored as a JSON blob in the Gafaelfawr secret.
 The OpenID Connect relying party presents the client ID and secret as part of the request to redeem a code for a token.
 
 The authorization codes Gafaelfawr returns as part of this OpenID Connect authentication flow are stored in :ref:`Redis <redis-oidc>`.
 
 The JWTs issued by the OpenID Connect authentication are unrelated to the tokens used elsewhere in the Science Platform and cannot be used to authenticate to services protected by the normal token and browser authentication flows.
+
+Gafaelfawr does no scope or other authorization checks when doing OpenID Connect authentication.
+All checks are left to the application that initiates the authentication.
 
 Storage
 =======
