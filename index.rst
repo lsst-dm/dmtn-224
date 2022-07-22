@@ -303,7 +303,7 @@ The following specific steps happen during step 6 of the generic browser flow, i
 #. Gafaelfawr retrieves the user's UID from Firestore, assigning a new UID if necessary if that username had not been seen before.
 #. Gafaelfawr retrieves the user's group membership from LDAP using the ``username`` as the search key.
 
-Subsequently, whenever Gafaelfawr receives an authentication subrequest to the ``/auth`` route, it retrieves the user's identity information and group membership from LDAP.
+Subsequently, whenever Gafaelfawr receives an authentication subrequest to the ``/auth`` route, it retrieves the user's identity information (name from ``displayName``, email from ``mail``) and group membership from LDAP.
 For each group, the GID for that group is retrieved from Firestore, and a new GID is assigned if that group has not been seen before.
 That data is then returned in HTTP headers that ingress-nginx includes in the request to the Science Platform service being accessed.
 Similarly, Gafaelfawr retrieves the user's identity information and group membership from LDAP and Firestore whenever it receives a request for the user information associated with a token.
