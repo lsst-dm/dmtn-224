@@ -27,8 +27,8 @@ The primary components of the identity management system for the Rubin Science P
 #. Some external source of user authentication
 #. A repository of identity information about users (name, email, group membership, etc.)
 #. A Kubernetes service (Gafaelfawr_) which runs in each Science Platform deployment, performs user authentication, applies high-level access control rules, and provides identity information to other Science Platform services via an API
-#. A configuration of the ingress-nginx_ Kubernetes ingress controller that uses Gafaelfawr_ as an auth subrequest handler to enforce authentication and authorization requirements
-#. A user interface for creating and managing tokens, currently implemented as part of Gafaelfawr_
+#. A configuration of the ingress-nginx_ Kubernetes ingress controller that uses Gafaelfawr as an auth subrequest handler to enforce authentication and authorization requirements
+#. A user interface for creating and managing tokens, currently implemented as part of Gafaelfawr
 
 .. _ingress-nginx: https://kubernetes.github.io/ingress-nginx/
 
