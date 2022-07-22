@@ -148,7 +148,7 @@ If the user no longer intends to use an identity provider, they can unlink it fr
 COmanage provides a group management mechanism called COmanage Registry Groups.
 This allows users to create and manage groups.
 This group mechanism is used for both user-managed and institution-managed groups.
-From the COmanage UI, users can change the membership of any group over which they have administrative rights, and can create new user-managemd groups.
+From the COmanage UI, users can change the membership of any group over which they have administrative rights, and can create new user-managed groups.
 
 COmanage administrators (designated by their membership in an internal COmanage group) can edit user identity information of other users via the COmanage UI, and can change any group (including user-managed groups, although normally an administrator will only do that to address some sort of problem or support issue).
 
@@ -300,7 +300,7 @@ The following specific steps happen during step 6 of the generic browser flow, i
 #. Gafaelfawr retrieves the OpenID Connect configuration information for CILogon and checks the signature on the JWT identity token.
 #. Gafaelfawr extracts the user's username from the ``username`` claim of the identity token.
    If that claim is missing, Gafaelfawr redirects the user to the enrollment flow at COmanage, which aborts the user's attempt to access whatever web page they were trying to visit.
-#. Gafaelfawr retrieves the user's UID from Firestore, assigning a new UID if necessry if that username had not been seen before.
+#. Gafaelfawr retrieves the user's UID from Firestore, assigning a new UID if necessary if that username had not been seen before.
 #. Gafaelfawr retrieves the user's group membership from LDAP using the ``username`` as the search key.
 
 Subsequently, whenever Gafaelfawr receives an authentication subrequest to the ``/auth`` route, it retrieves the user's identity information and group membership from LDAP.
@@ -394,7 +394,7 @@ The behavior of redirecting the user to log in if they are not authenticated is 
 For API services that are not used by browsers, ingress-nginx should not be configured with the ``nginx.ingress.kubernetes.io/auth-signin`` annotation.
 In this case, it will return the 401 challenge to the client instead of redirecting.
 
-When authenticating a request with a token, Gafaelfawr does not care what type of token is pressented.
+When authenticating a request with a token, Gafaelfawr does not care what type of token is presented.
 It may be a user, notebook, internal, or service token; all of them are handled the same way.
 
 Service tokens, used for service-to-service API calls unrelated to a specific user request, are managed as Kubernetes secrets via a Kubernetes custom resource.
@@ -409,7 +409,7 @@ A user often makes many requests to a service over a short period of time, parti
 If that service needs delegated tokens (notebook or internal tokens), a naive approach would create a plethora of child tokens, causing significant performance issues.
 Gafaelfawr therefore reuses notebook and internal tokens where possible.
 
-The criterial for reusing a notebook token is:
+The criteria for reusing a notebook token is:
 
 #. Same parent token
 #. Parent token expiration has not changed
@@ -528,7 +528,7 @@ This information comes from OpenID Connect claims or from GitHub queries for inf
 - **groups**: The user's group membership as a list of dicts with two keys, **name** and **id** (the unique numeric GID of the group)
 
 For general access deployments, none of these fields are ever set.
-For GitHub deployments, all of these fields are set (if the data is available; in the case of naem and email, it may not be).
+For GitHub deployments, all of these fields are set (if the data is available; in the case of name and email, it may not be).
 For OpenID Connect deployments, whether a field is set depends on whether that field is configured to come from LDAP or to come from the OpenID Connect token claims.
 In the latter case, the information is stored with the token.
 Tokens created via the admin token API may have these fields set, in which case the values set via the admin token API override any values in LDAP, even if LDAP is configured.
@@ -577,7 +577,7 @@ SQL database
 ------------
 
 Cloud SQL is used wherever possible, via the `Cloud SQL Auth proxy`_ running as a sidecar container in Gafaelfawr pods.
-For deployments outside of :abbr:`GCS (Google Cloud Services)`, an in-cluser PostgreSQL server deployed as part of the Science Platform is used instead.
+For deployments outside of :abbr:`GCS (Google Cloud Services)`, an in-cluster PostgreSQL server deployed as part of the Science Platform is used instead.
 Authentication to the SQL server is via a password injected as a Kubernetes secret into the Gafaelfawr pods.
 
 .. _Cloud SQL auth proxy: https://cloud.google.com/sql/docs/postgres/connect-admin-proxy
@@ -658,7 +658,7 @@ Bootstrapping
 -------------
 
 Gafaelfawr provides a command-line utility to bootstrap a new installation of the token management system by creating the necessary database schema.
-To bootstrap administrative access, this step adds a configured list of usernames to the SQL databsae as admins.
+To bootstrap administrative access, this step adds a configured list of usernames to the SQL database as admins.
 These administrators can then use the API or web interface to add additional administrators.
 
 Gafaelfawr's configuration may also include a bootstrap token.
@@ -672,7 +672,7 @@ Caching
 =======
 
 In normal operation, Gafaelfawr often receives a flurry of identical authentication subrequests.
-This can happen from requent API calls, but is even more common for users using a web browser, since each request for a resource from the service (images, JavaScript, icons, etc.) triggers another auth subrequest.
+This can happen from frequent API calls, but is even more common for users using a web browser, since each request for a resource from the service (images, JavaScript, icons, etc.) triggers another auth subrequest.
 Gafaelfawr therefore must be able to answer those subrequests as quickly as possible, and should not pass that query load to backend data stores and other services that may not be able to handle that volume.
 
 This is done via caching.
@@ -754,7 +754,7 @@ That resource looks like the following:
        - <scope-1>
        - <scope-2>
 
-This requests a service token be created with the username ``bot-<service-name>`` and havig scopes ``<scope-1>`` and ``<scope-2>``.
+This requests a service token be created with the username ``bot-<service-name>`` and having scopes ``<scope-1>`` and ``<scope-2>``.
 (All service token usernames must start with ``bot-``.)
 
 This service token will be stored in a Kubernetes ``Secret`` resource with the same name and in the same namespace as the ``GafaelfawrServiceToken`` resource.
@@ -972,7 +972,7 @@ DMTN-234_
 
 SQR-044_
     Requirements for the identity management system.
-    This document is now incompete and partly out of date, but still provides useful detail of requirements that have not yet been incorporated into the design.
+    This document is now incomplete and partly out of date, but still provides useful detail of requirements that have not yet been incorporated into the design.
 
 SQR-049_
     Detailed design of the token management system for the Science Platform, including its API and storage model.
@@ -1012,7 +1012,7 @@ Operations
 
 Gafaelfawr_
     The primary component of the identity management system.
-    Its documentation convers operational issues such as configuration and maintenance.
+    Its documentation covers operational issues such as configuration and maintenance.
 
 Phalanx_
     The configuration and deployment infrastructure for the Science Platform.
