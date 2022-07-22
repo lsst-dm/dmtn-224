@@ -1134,15 +1134,9 @@ SQR-044_
     Requirements for the identity management system.
     This document is now incomplete and partly out of date, but still provides useful detail of requirements that have not yet been incorporated into the design.
 
-SQR-049_
-    Original design of the token management system for the Science Platform, including its API and storage model.
-    This has now been partly superseded by this document, and the API description there has been superseded by the API described in the Gafaelfawr_ documentation.
-    However, it remains the working specification for tracking authentication history and logging to Kafka, which have not yet been implemented.
-
 .. _DMTN-225: https://dmtn-225.lsst.io/
 .. _DMTN-234: https://dmtn-225.lsst.io/
 .. _SQR-044: https://sqr-044.lsst.io/
-.. _SQR-049: https://sqr-049.lsst.io/
 
 Security
 --------
@@ -1168,8 +1162,12 @@ DMTN-235_
 SQR-055_
     How to configure COmanage for the needs of the identity management component of the Science Platform.
 
+SQR-069_
+    Documents the decisions, trade-offs, and analysis behind the current design and implementation of the identity management system.
+
 .. _DMTN-235: https://dmtn-235.lsst.io/
 .. _SQR-055: https://sqr-055.lsst.io/
+.. _SQR-069: https://sqr-069.lsst.io/
 
 Operations
 ----------
@@ -1236,10 +1234,12 @@ SQR-039_
     Problem statement and proposed redesign for the identity management system, which led (with numerous modifications) to the current design.
     This document contains a detailed discussion of the decision not to use :abbr:`JWTs (JSON Web Tokens)` in the authentication system, and to keep authorization information such as group credentials out of the authentication tokens.
 
-SQR-069_
-    Documents the decisions, trade-offs, and analysis behind the current design and implementation of the identity management system.
+SQR-049_
+    Original design of the token management system for the Science Platform, including its API and storage model.
+    This has now been superseded by this document, and the API description there has been superseded by the API described in the Gafaelfawr_ documentation.
+    Still of possible interest in this document are the Kafka design, the specification for the housekeeping process, the API for authentication history, and the details of the desired token UI.
 
 .. _DMTN-094: https://dmtn-094.lsst.io/
 .. _DMTN-116: https://dmtn-116.lsst.io/
 .. _SQR-039: https://sqr-039.lsst.io/
-.. _SQR-069: https://sqr-069.lsst.io/
+.. _SQR-049: https://sqr-049.lsst.io/
