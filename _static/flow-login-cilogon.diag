@@ -18,12 +18,12 @@ seqdiag {
             gafaelfawr => cilogon [label = "get ID token", return = "JWT"];
             gafaelfawr => cilogon [label = "get OpenID config",
                                    return = "config"];
-            gafaelfawr => ldap [label = "get user data"];
+            gafaelfawr => LDAP [label = "get user data"];
         ingress <-- gafaelfawr;
     browser <-- ingress [label = "redirect to service"]
     browser -> ingress;
         ingress -> gafaelfawr [label = "auth subrequest"];
-            gafaelfawr => ldap [label = "get user data"];
+            gafaelfawr => LDAP [label = "get user data"];
         ingress <-- gafaelfawr [label = "200"];
         ingress => service;
     browser <-- ingress;
