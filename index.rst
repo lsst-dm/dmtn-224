@@ -792,13 +792,21 @@ Links of type ``next``, ``prev``, and ``first`` will be included.
 Token UI
 --------
 
-Implements IDM-0105.
+The token component of the identity management system also has a user-facing UI.
+From that UI, a user of the Science Platform can see their existing tokens, create or manage their user tokens, and see a history of changes to their tokens.
 
-The Science Platform provides a token management UI linked from the front page of each instance of the Science Platform.
-That UI uses the user's session token for authentication and makes API calls to view tokens, create new user tokens, delete or modify tokens, or review token history.
+This UI is implemented in client-side JavaScript (using React_) and performs all of its operations via the token API.
+This ensures that there is one implementation of any token operation, used by both the API and the UI.
+The API provides a login route to the UI that provides the CSRF token (see :ref:`CSRF protection <csrf>`) and configuration information required to construct the UI.
 
-Currently, the UI is implemented in React using Gatsby to package the web application, without any styling.
-In the future, we expect to move it to Next.js and integrate it with the styles and visual look of the browser interface to the Science Platform.
+.. _React: https://reactjs.org/
+
+Currently, the UI is maintained as part of Gafaelfawr and served as static web pages by the same web service that serves the token API and the auth subrequest handler for ingress-nginx.
+It uses Gatsby_ to compile the web UI into JavaScript bundles suitable for serving to a web browser.
+The current implementation is purely functional with no styling and a poor user interface, intended only as a proof of concept.
+In the future, this UI is likely to move into another Science Platform service responsible for browser UI for the Science Platform as a whole.
+
+.. _Gatsby: https://www.gatsbyjs.com/
 
 .. _csrf:
 
