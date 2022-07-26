@@ -260,7 +260,7 @@ The details of steps 5 and 6 vary depending on the authentication provider, as d
 #. The Gafaelfawr ``/auth`` route receives the headers of the original request.
    No token is present in an ``Authorization`` header, nor is there an authentication session cookie.
    The ``/auth`` route therefore returns an HTTP 401 error.
-#. ingress-nginx determines from its annotations that this means the user should be redirected to the ``/login`` route with the original URL included in the ``X-Auth-Request-Redirect`` header.
+#. ingress-nginx determines from its ``nginx.ingress.kubernetes.io/auth-signin`` annotation that the user should be redirected to the ``/login`` route with the original URL included in the ``X-Auth-Request-Redirect`` header.
 #. The Gafaelfawr ``/login`` route sets a session cookie containing a randomly-generated ``state`` parameter (for session fixation protection).
    It also includes the return URL in that session cookie.
    It then returns a redirect to the authentication provider that contains the ``state`` string plus other required information for the authentication request.
@@ -375,6 +375,26 @@ Gafaelfawr retrieves it on the fly whenever it is needed (possibly via a cache).
 Changes in LDAP are therefore reflected immediately in the Science Platform (after the expiration of any cache entries).
 
 If instead the user's identity information comes from the JWT issued by the OpenID Connect authentication process, that data is stored with the token and inherited by any other child tokens of the session token, or any user tokens created using that session token, similar to how data from GitHub is handled.
+
+Uauthenticated JavaScript
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Normally, an authenticated user results in Gafaelfawr returning a 401 response, which in turn tells ingress-nginx to replace this response with a redirect the user to the login route.
+
+This approach to login handling can cause problems when combined with expiring sessions and web pages with JavaScript that makes background requests.
+If the user had previously authenticated and has a web page with active JavaScript open, and then their authentication credentials expire, the page JavaScript may continue to make requests.
+If those requests result in 401 errors and thus redirects to the login page, JavaScript will attempt to follow that redirect and get back an HTML page that it doesn't know what to do with.
+Depending on the JavaScript, this may trigger an error condition that causes it to repeatedly retry.
+Worse, the login action normally triggers a further redirect to the identity provider, which in turn may trigger further redirects and relatively expensive operations such as creating a login session.
+On a page with very active JavaScript and a deployment with relatively expensive login handling, this can create an inadvertant denial of service attack on the identity provider.
+
+To avoid this, if Gafaelfawr sees a request from an unauthenticated user that contains the HTTP header ``X-Requested-With: XMLHttpRequest``, it returns a 403 error rather than a 401 error.
+This returns an immediate permission denied error that does not trigger the redirect handling in ingress-nginx.
+The presence of this header indicates an AJAX request, which in turn means that the request is not under full control of the browser window.
+The JavaScript call will still fail, but with a more straightforward error message and without creating spurious load on the identity provider.
+When the user reloads the page, the browser will send a regular request without that header and receive the normal redirect.
+
+Checking for this header does not catch all requests that are pointless to redirect (image and CSS requests, for instance), and not all AJAX requests will send the header, but in practice it seems to catch the worst cases.
 
 Token flows
 -----------
