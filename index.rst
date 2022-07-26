@@ -396,6 +396,27 @@ When the user reloads the page, the browser will send a regular request without 
 
 Checking for this header does not catch all requests that are pointless to redirect (image and CSS requests, for instance), and not all AJAX requests will send the header, but in practice it seems to catch the worst cases.
 
+Cached authorization errors
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Depite the HTTP specification saying that 403 responses should not be cached, browsers and proxies sometimes decide to cache them anyway.
+This creates confusing behavior if a user did not have access to a service, obtains it, logs out and back in again to get their new token scopes, and then tries to visit the service again, only to have the cached 403 response shown again by their browser.
+Unfortunately, NGINX does not pass the headers of a 403 failure from an auth request subhandler to the client, so this cannot be fixed in the obvious way by a ``Cache-Control`` header.
+
+As a workaround, Gafaelfawr provides a route that serves a 403 response to all requests with an ``WWW-Authenticate`` for a token with insufficient scope.
+This route can be configured as a custom 403 handler in the ``Ingress`` resource for a service using the following annotation:
+
+.. code-block:: yaml
+
+   nginx.ingress.kubernetes.io/configuration-snippet: |
+     error_page 403 = "/auth/forbidden?scope=<scope>";
+
+Note the parameters (here just ``scope``), which should be set to the same parameters that were passed to the Gafaelfawr ``/auth`` endopint using the ``nginx.ingress.kubernetes.io/auth-url`` annotation.
+This allows Gafaelfawr to construct an accurate ``WWW-Authenticate`` header.
+This route returns a response with a ``Cache-Control`` saying that it cannot be cached.
+
+There is unfortunately no way to pass the reason for the 403 error to this handler, so it has to blindly assume that the 403 error was due to missing a required scope.
+
 Token flows
 -----------
 
