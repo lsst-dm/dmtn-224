@@ -1167,6 +1167,10 @@ Design
 DMTN-169_
     Proposed design for access control to Butler, the system that manages read and write access to Rubin Observatory data.
 
+DMTN-182_
+    Supplements DMTN-169_ with a design for how Butler should make access control decisions for a given operation.
+    Proposes that all access control decisions should be based on the user's group membership as exposed by the identity management system.
+
 DMTN-225_
     Metadata gathered and stored for each user, including constraints such as valid username and group name patterns and UID and GID ranges.
 
@@ -1179,6 +1183,7 @@ SQR-044_
     This document is now incomplete and partly out of date, but still provides useful detail of requirements that have not yet been incorporated into the design.
 
 .. _DMTN-169: https://dmtn-169.lsst.io/
+.. _DMTN-182: https://dmtn-182.lsst.io/
 .. _DMTN-225: https://dmtn-225.lsst.io/
 .. _DMTN-234: https://dmtn-225.lsst.io/
 .. _SQR-044: https://sqr-044.lsst.io/
