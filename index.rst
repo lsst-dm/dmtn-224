@@ -1164,6 +1164,9 @@ References
 Design
 ------
 
+DMTN-169_
+    Proposed design for access control to Butler, the system that manages read and write access to Rubin Observatory data.
+
 DMTN-225_
     Metadata gathered and stored for each user, including constraints such as valid username and group name patterns and UID and GID ranges.
 
@@ -1175,6 +1178,7 @@ SQR-044_
     Requirements for the identity management system.
     This document is now incomplete and partly out of date, but still provides useful detail of requirements that have not yet been incorporated into the design.
 
+.. _DMTN-169: https://dmtn-169.lsst.io/
 .. _DMTN-225: https://dmtn-225.lsst.io/
 .. _DMTN-234: https://dmtn-225.lsst.io/
 .. _SQR-044: https://sqr-044.lsst.io/
