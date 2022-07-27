@@ -261,12 +261,12 @@ The details of steps 5 and 6 vary depending on the authentication provider, as d
    No token is present in an ``Authorization`` header, nor is there an authentication session cookie.
    The ``/auth`` route therefore returns an HTTP 401 error.
 #. ingress-nginx determines from its ``nginx.ingress.kubernetes.io/auth-signin`` annotation that the user should be redirected to the ``/login`` route with the original URL included in the ``X-Auth-Request-Redirect`` header.
-#. The Gafaelfawr ``/login`` route sets a session cookie containing a randomly-generated ``state`` parameter (for session fixation protection).
+#. The Gafaelfawr ``/login`` route sets a session cookie containing a randomly-generated ``state`` parameter.
    It also includes the return URL in that session cookie.
    It then returns a redirect to the authentication provider that contains the ``state`` string plus other required information for the authentication request.
 #. The user interacts with the authentication provider to prove their identity, which eventually results in a redirect back to the ``/login`` route.
    That return request includes an authorization code and the original ``state`` string, as well as possibly other information.
-#. The ``/login`` route requires the ``state`` code match the value from the user's session cookie to protect against session fixation.
+#. The ``/login`` route requires the ``state`` code match the value from the user's session cookie.
    It then extracts the authorization code and redeems it for a token from the authentication provider.
    Gafaelfawr may then validate that token and may use it to get more information about the user, depending on the identity provider as discussed below.
 #. Based on the user's identity data, the ``/login`` route creates a new session token and stores the associated data in the Gafaelfawr token store.
@@ -281,6 +281,12 @@ The details of steps 5 and 6 vary depending on the authentication provider, as d
    If LDAP is configured, user metadata such as group memberships and email address are retrieved from LDAP.
    That metadata, either from the data stored with the token or from LDAP, is added to additional response headers.
    Gafaelfawr then returns 200 with those response headers, and NGINX then proxies the request to the protected application and user interaction continues as normal, possibly including some of the response headers in the proxied request.
+
+Of special security note is the ``state`` parameter validation.
+During initial authentication, Gafaelfawr sends a ``state`` parameter to the OAuth 2.0 or OpenID Connect authentication provider and also stores that parameter in the session cookie.
+On return from authentication, the ``state`` parameter returned by the authentication provider is compared to the value in the session cookie and the authentication is rejected if they do not match.
+This protects against session fixation (an attacker tricking a user into authenticating as the attacker instead of the user, thus giving the attacker access to data subsequently uploaded to the user).
+The state value is a 128-bit random value generated using :py:func:`os.urandom`.
 
 CILogon
 ^^^^^^^
@@ -375,6 +381,28 @@ Gafaelfawr retrieves it on the fly whenever it is needed (possibly via a cache).
 Changes in LDAP are therefore reflected immediately in the Science Platform (after the expiration of any cache entries).
 
 If instead the user's identity information comes from the JWT issued by the OpenID Connect authentication process, that data is stored with the token and inherited by any other child tokens of the session token, or any user tokens created using that session token, similar to how data from GitHub is handled.
+
+Logout flow
+^^^^^^^^^^^
+
+The user may go to ``/logout`` at any time to revoke their current session.
+Their session token will be revoked, which will also revoke all child tokens, so any services still performing actions on the behalf of that user from that session will immediately have their credentials revoked.
+As discussed in :ref:`GitHub flow <github-flow>`, this will also revoke their GitHub OAuth App authorization in Science Platform deployments using GitHub for identity.
+
+The ``/logout`` route takes an ``rd`` parameter specifying the URL to which to direct the user after logout.
+If it is not set, a default value configured for that Science Platform deployment (usually the top-level page) will be used instead.
+
+Redirect restrictions
+^^^^^^^^^^^^^^^^^^^^^
+
+The ``/login`` and ``/logout`` routes redirect the user after processing.
+The URL to which to redirect the user may be specified as a ``GET`` parameter or, in the case of ``/login``, an HTTP header that is normally set by ingress-nginx.
+To protect against open redirects, the specified redirect URL must be on the same host as the host portion of the incoming request for the ``/login`` or ``/logout`` route.
+(This is expected to change in the future when the more complex domain scheme proposed in DMTN-193_ is adopted.)
+
+``X-Forwarded-Host`` headers (expected to be set by ingress-nginx) are trusted for the purposes of determining the host portion of the request.
+``Forwarded`` appears not to be supported by the NGINX ingress at present and therefore is not used.
+For more details on the required configuration to ensure that ``X-Forwarded-*`` headers are correctly set by ingres-nginx, see :ref:`Client IP addresses <client-ips>`.
 
 Uauthenticated JavaScript
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1073,7 +1101,7 @@ API calls may be authenticated one of two ways: by providing a token in an ``Aut
 The session cookie method is used by the token UI.
 Direct API calls will use the ``Authorization`` header.
 
-All API ``POST``, ``PATCH``, or ``DELETE`` calls authenticated via session cookie must include an ``X-CSRF-Token`` header in the request.
+All API ``POST``, ``PATCH``, ``PUT``, or ``DELETE`` calls authenticated via session cookie must include an ``X-CSRF-Token`` header in the request.
 The value of this header is obtained via a login route, used by the token UI.
 This value will be checked by the server against the CSRF token included in the user's session cookie.
 Direct API calls authenticating with the ``Authorization`` header can ignore this requirement, since cross-site state-changing requests containing an ``Authorization`` header and a JSON payload are blocked by the web security model.
