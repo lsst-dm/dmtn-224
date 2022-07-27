@@ -551,6 +551,7 @@ In detail:
 #. The protected service presents that authorization code to ``/auth/openid/token``.
 #. Gafaelfawr validates that code and returns a JWT representing the user to the protected service.
    That JWT has a hard-coded scope of ``openid``.
+   The authorization code is then invalidated and cannot be used again.
 #. The protected service should validate the signature on the JWT by retrieving metadata about the signing key from ``/.well-known/openid-configuration`` and ``/.well-known/jwks.json``, which are also served by Gafaelfawr.
 #. The protected service optionally authenticates as the user to ``/auth/userinfo``, using that JWT as a bearer token, and retrieves metadata about the authenticated user.
    Alternately, the protected service can read information directly from the JWT claims.
@@ -745,7 +746,8 @@ The value is an encrypted JSON document with the following keys:
 * **created_at**: When the code was issued
 
 The Redis key is set to expire in one hour, which is the length of time for which the code is valid.
-Codes are not stored anywhere else, so once they expire or are redeemed, they are permanently deleted.
+As soon as the code is redeemed for a JWT, it is deleted from Redis, so it cannot be used again.
+Codes are not stored anywhere else, so once they expire or are redeemed they are permanently forgotten.
 
 The code JSON document is encrypted with Fernet_ in exactly the same way that token information is encrypted.
 
