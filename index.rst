@@ -573,6 +573,12 @@ This implementation has the following protocol limitations:
 The authorization codes Gafaelfawr returns as part of this OpenID Connect authentication flow are stored in :ref:`Redis <redis-oidc>`.
 
 The JWTs issued by the OpenID Connect authentication are unrelated to the tokens used elsewhere in the Science Platform and cannot be used to authenticate to services protected by the normal token and browser authentication flows.
+Gafaelfawr always uses the ``RS256`` algorithm for JWTs, which signs the token (but does not encrypt it) with a 2048-bit RSA key.
+JWT signing and validation is done using PyJWT_.
+
+.. _PyJWT: https://pyjwt.readthedocs.io/en/latest/
+
+The public key used for the JWT signature is published at the standard ``/.well-known/openid-configuration`` URL defined in `the OpenID Connect Discovery 1.0 specification <https://openid.net/specs/openid-connect-discovery-1_0.html>`__.
 
 Gafaelfawr does no scope or other authorization checks when doing OpenID Connect authentication.
 All checks are left to the application that initiates the authentication.
@@ -667,13 +673,18 @@ If the user's identity information doesn't come from LDAP, Redis also stores the
 Token format
 ------------
 
-A token is of the form ``gt-<key>.<secret>``.
+A token has two components: the key and a secret.
+The key is visible to anyone who can list the keys in the Gafaelfawr Redis store or authenticate to the token API as the user.
+Security of the system does not rely on keeping the key confidential.
+Proof of possession comes from the secret portion of the token, which must match the secret value stored inside the token's associated data for the token to be valid.
+The secret is a 128-bit random value generated using :py:func:`os.urandom`.
+
+Tokens are formatted as ``gt-<key>.<secret>``.
 The ``gt-`` part is a fixed prefix to make it easy to identify tokens, should they leak somewhere where they were not expected.
-The ``<key>`` is the Redis key under which data about the token is stored.
-The ``<secret>`` is an opaque value used to prove that the holder of the token is allowed to use it.
+
+Token data is stored in Redis under a key derived from the key portion of the token.
+The secret is stored as part of the token data.
 Wherever the token is named, such as in UIs, only the ``<key>`` component is given, omitting the secret.
-When the token is presented for authentication, the secret provided is checked against the stored secret for that key.
-Checking the secret prevents someone who can list the keys in the Redis session store from using those keys as session handles.
 
 Redis
 -----
@@ -719,6 +730,10 @@ The token JSON document is encrypted with Fernet_ using a key that is private to
 This encryption prevents an attacker with access only to the Redis store, but not to the running authentication system or its secrets, from using the Redis keys to reconstruct working tokens.
 
 .. _Fernet: https://cryptography.io/en/latest/fernet/
+
+When the token is presented for authentication, the token data is retrieved from Redis using the key, and the secret provided is checked against the stored secret for that key.
+If the secrets do not match, the token is considered invalid and none of the retrieved data is returned to the user attempting to authenticate.
+Because the secret is in a Fernet-encrypted blog, someone who can list the keys in the Redis store but does not have the fernet encryption key cannot use those keys as tokens, since they have no access to the secret and thus cannot recreate the full token.
 
 .. _redis-oidc:
 
@@ -768,6 +783,10 @@ The SQL database stores the following data:
 #. History of changes (creation, revocation, expiration, modification) to tokens, including who made the change and the IP address from which it was made.
 #. List of authentication administrators, who automatically get the ``admin:token`` scope when they authenticate via a browser;
 #. History of changes to admins, including who made the change and the IP address from which it was made.
+
+Critically, the token secret is not stored in the SQL database, only in Redis.
+A token therefore cannot be recreated from the SQL database.
+Redis is the only authority for whether a token is valid.
 
 Note that IP addresses are stored with history entries.
 IP addresses are personally identifiable information and may be somewhat sensitive, but are also extremely useful in debugging problems and identifying suspicious behavior.
