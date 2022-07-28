@@ -743,14 +743,21 @@ This information comes from OpenID Connect claims or from GitHub queries for inf
 - **uid**: The user's unique numeric UID
 - **groups**: The user's group membership as a list of dicts with two keys, **name** and **id** (the unique numeric GID of the group)
 
-For general access deployments, none of these fields are ever set.
-For GitHub deployments, all of these fields are set (if the data is available; in the case of name and email, it may not be).
-For OpenID Connect deployments, whether a field is set depends on whether that field is configured to come from LDAP or to come from the OpenID Connect token claims.
-In the latter case, the information is stored with the token.
-Tokens created via the admin token API may have these fields set, in which case the values set via the admin token API override any values in LDAP, even if LDAP is configured.
-In other words, Gafaelfawr uses any data stored with the token by preference, and queries LDAP (if configured) only for data not stored with the token.
+If this data is set in Redis, that information is used by preference.
+If UID or GID information is not set in Redis and Firestore is configured (which is the case for general access deployments), those values are taken from Firestore.
+For data not present in Redis or Firestore (if configured), LDAP is queried for the information.
+In other words, Gafaelfawr uses any data stored with the token in Redis by preference, then Firestore (if configured), then LDAP (if configured).
 
+If LDAP is not configured and no source of that data was found, that data element is empty, is not included in API responses, and is not set in the relevant HTTP header (if any).
+
+For general access deployments, none of these fields are set during token creation.
+All data comes from Firestore or LDAP.
+For GitHub deployments, all of these fields are set (if the data is available; in the case of name and email, it may not be).
+For OpenID Connect deployments, whether a field is set depends on whether that field is configured to come from LDAP or Firestore, or to come from the OpenID Connect token claims.
+In the latter case, the information is stored with the token.
 Child tokens and user tokens created from a token with user identity information will have that identity information copied into the data stored for the newly-created token in Redis.
+
+Tokens created via the admin token API may have these fields set, in which case the values set via the admin token API are stored in Redis and thus override any values in LDAP, even if LDAP is configured.
 
 The Redis key for a token is set to expire when the token expires.
 
