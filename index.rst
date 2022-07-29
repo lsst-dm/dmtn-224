@@ -47,7 +47,7 @@ As discussed in DMTN-234_, there is no single Rubin Science Platform.
 There are multiple deployments of the Science Platform at different sites with different users and different configurations.
 With respect to the identity management system, these differ primarily in the choice of the first two components.
 
-Federated identity deployments use CILogon_ as the source of user authentication and COmanage_ as the repository of identity information.
+For federated identity deployments, we have chosen CILogon_ as the source of user authentication and COmanage_ as the repository of identity information.
 Here is the architecture for those deployments, expanding the identity management portion and simplifying the rest of the Science Platform to a single protected service:
 
 .. _CILogon: https://www.cilogon.org/
@@ -59,7 +59,7 @@ Here is the architecture for those deployments, expanding the identity managemen
    Detail of the components for identity management for a deployment of the Science Platform that uses federated identity.
    The Science Platform aspects and services are represented here by a single service to make the diagram simpler.
 
-The other two options are to use GitHub for both authenitcation and identity mangaement, or to use a local `OpenID Connect`_ authentication provider as the source of user authentication.
+The other two supported options are to use GitHub for both authenitcation and identity mangaement, or to use a local `OpenID Connect`_ authentication provider as the source of user authentication.
 In the latter case, user identity information can come either from the OpenID Connect authentication provider or from a local LDAP server.
 
 .. _OpenID Connect: https://openid.net/specs/openid-connect-core-1_0.html
@@ -76,8 +76,9 @@ Identity management
 
 The identity management component of the system authenticates the user and maps that authentication to identity information.
 
-When federated identity is required, authentication is done via the OpenID Connect protocol using CILogon, which in turn supports SAML and identity federations as well as other identity providers such as GitHub and Google.
-The other options are an OAuth 2.0 authentication request to GitHub or an OpenID Connect authentication request to a local identity provider.
+When federated identity is required, authentication is done via the OpenID Connect protocol using CILogon.
+CILogon gives the user the option SAML authentication (used by most identity federations such as InCommon) or other identity providers such as GitHub and Google, and then communicates the resulting authentication information to Gafaelfawr with OpenID Connect.
+The other supported deployment options are an OAuth 2.0 authentication request to GitHub or an OpenID Connect authentication request to a local identity provider.
 
 Once the user has been authenticated, their identity must be associated with additional information: full name, email address, numeric UID, group membership, and numeric GIDs for the groups.
 In deployments using federated identity, most of this data comes from :ref:`COmanage <comanage-idm>` (via LDAP), and numeric UIDs and GIDs come from :ref:`Firestore <firestore>`.
@@ -1246,7 +1247,7 @@ SQR-044_
 .. _DMTN-169: https://dmtn-169.lsst.io/
 .. _DMTN-182: https://dmtn-182.lsst.io/
 .. _DMTN-225: https://dmtn-225.lsst.io/
-.. _DMTN-234: https://dmtn-225.lsst.io/
+.. _DMTN-234: https://dmtn-234.lsst.io/
 .. _SQR-044: https://sqr-044.lsst.io/
 
 Security
