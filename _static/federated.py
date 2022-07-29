@@ -27,9 +27,9 @@ node_attr = {
 }
 
 with Diagram(
-    "General access deployment",
+    "Federtaed identity deployment",
     show=False,
-    filename="general-access",
+    filename="federated",
     outformat="png",
     graph_attr=graph_attr,
     node_attr=node_attr,

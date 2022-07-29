@@ -33,7 +33,7 @@ clean:
 
 images: _static/flow-jupyter.svg _static/flow-login-cilogon.svg		\
 	_static/flow-login-github.svg _static/flow-login-oidc.svg	\
-	_static/flow-oidc.svg _static/general-access.png		\
+	_static/flow-oidc.svg _static/federated.png			\
 	_static/science-platform.png
 
 %.svg: %.diag

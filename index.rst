@@ -47,36 +47,41 @@ As discussed in DMTN-234_, there is no single Rubin Science Platform.
 There are multiple deployments of the Science Platform at different sites with different users and different configurations.
 With respect to the identity management system, these differ primarily in the choice of the first two components.
 
-General access deployments of the Science Platform use CILogon_ as the source of user authentication, and COmanage_ as the repository of identity information.
-Here is the architecture for general access deployments, expanding the identity management portion and simplifying the rest of the Science Platform to a single protected service:
+Federated identity deployments use CILogon_ as the source of user authentication and COmanage_ as the repository of identity information.
+Here is the architecture for those deployments, expanding the identity management portion and simplifying the rest of the Science Platform to a single protected service:
 
 .. _CILogon: https://www.cilogon.org/
 .. _COmanage: https://www.incommon.org/software/comanage/
 
-.. figure:: /_static/general-access.png
-   :name: General access identity management architecture
+.. figure:: /_static/federated.png
+   :name: Federated identity management architecture
 
-   Detail of the components for identity management for a general access deployment of the Science Platform.
+   Detail of the components for identity management for a deployment of the Science Platform that uses federated identity.
    The Science Platform aspects and services are represented here by a single service to make the diagram simpler.
 
-Restricted access deployments use either GitHub or a local `OpenID Connect`_ authentication provider as the source of user authentication; and one of GitHub, a local LDAP server, or the OpenID Connect authentication provider as the source of identity information.
+The other two options are to use GitHub for both authenitcation and identity mangaement, or to use a local `OpenID Connect`_ authentication provider as the source of user authentication.
+In the latter case, user identity information can come either from the OpenID Connect authentication provider or from a local LDAP server.
 
 .. _OpenID Connect: https://openid.net/specs/openid-connect-core-1_0.html
 
-A restricted access deployment that uses GitHub looks essentially identical to the first architecture diagram with GitHub as the identity provider.
+A deployment that uses GitHub looks essentially identical to the first architecture diagram, with GitHub as the identity provider.
 One that uses OpenID Connect is similar, but will likely separate the identity provider box into an OpenID Connect provider and an LDAP server that will be queried for metadata.
+It's possible to use only claims from the OpenID Connect provider for all identity information, but usually it's more convenient to use a local LDAP server.
+
+The identity management system is largely identical in those three deployment options.
+Where there are differences, they will be mentioned specifically in the following discussion.
 
 Identity management
 ===================
 
 The identity management component of the system authenticates the user and maps that authentication to identity information.
 
-In general access deployments, authentication is done via the OpenID Connect protocol using CILogon, which in turn supports SAML and identity federations as well as other identity providers such as GitHub and Google.
-Restricted access deployments use either an OAuth 2.0 authentication request to GitHub or an OpenID Connect authentication request to a local identity provider.
+When federated identity is required, authentication is done via the OpenID Connect protocol using CILogon, which in turn supports SAML and identity federations as well as other identity providers such as GitHub and Google.
+The other options are an OAuth 2.0 authentication request to GitHub or an OpenID Connect authentication request to a local identity provider.
 
 Once the user has been authenticated, their identity must be associated with additional information: full name, email address, numeric UID, group membership, and numeric GIDs for the groups.
-In general access deployments, most of this data comes from :ref:`COmanage <comanage-idm>` (via LDAP), and numeric UIDs and GIDs come from :ref:`Firestore <firestore>`.
-For restricted access deployments using GitHub, access to the user's profile and organization membership is requested as part of the OAuth 2.0 request, and then retrieved after authentication with the token obtained by the OAuth 2.0 authentication.  See :ref:`GitHub <github>` for more details.
+In deployments using federated identity, most of this data comes from :ref:`COmanage <comanage-idm>` (via LDAP), and numeric UIDs and GIDs come from :ref:`Firestore <firestore>`.
+For GitHub deployments, access to the user's profile and organization membership is requested as part of the OAuth 2.0 request, and then retrieved after authentication with the token obtained by the OAuth 2.0 authentication.  See :ref:`GitHub <github>` for more details.
 With OpenID Connect, this information is either extracted from the claims of the JWT_ issued as a result of the OpenID Connect authentication flow, or is retrieved from LDAP.
 
 .. _JWT: https://datatracker.ietf.org/doc/html/rfc7519
@@ -236,7 +241,7 @@ The ``id`` attribute for each team will be used as the GID of the corresponding 
 Authentication flows
 ====================
 
-For general access environments that use COmanage, this section assumes the COmanage account for the user already exists.
+This section assumes the COmanage account for the user already exists if COmanage is in use.
 If it does not, see :ref:`COmanage onboarding <comanage-onboarding>`.
 
 See the Gafaelfawr_ documentation for specific details on the ingress-nginx annotations used to protect services and the HTTP headers that are set and available to be passed down to the service after successful authentication.
@@ -550,7 +555,7 @@ For example, :abbr:`GKE (Google Kubernetes Engine)` does this with `Project Cali
 
 The Science Platform can still be deployed on Kubernetes clusters without ``NetworkPolicy`` enforcement.
 However, be aware that this offers no authentication or access control protection within the cluster, including from users with access to the Notebook Aspect.
-This may be an acceptable risk for restricted access clusters whose only users are trusted project members.
+This may be an acceptable risk for deployments whose only users are trusted project members.
 
 .. _oidc-flow:
 
@@ -687,7 +692,7 @@ Storage
 =======
 
 This section deals only with storage for Gafaelfawr in each Science Platform deployment.
-For the storage of identity management information for each registered user in a general access deployment, see :ref:`COmanage <comanage-idm>`.
+For the storage of identity management information for each registered user when federated identity is in use, see :ref:`COmanage <comanage-idm>`.
 
 Gafaelfawr storage is divided into two, sometimes three, backend stores: a SQL database, Redis, and optionally Firestore.
 Redis is used for the token itself, including the authentication secret.
@@ -744,16 +749,16 @@ This information comes from OpenID Connect claims or from GitHub queries for inf
 - **groups**: The user's group membership as a list of dicts with two keys, **name** and **id** (the unique numeric GID of the group)
 
 If this data is set in Redis, that information is used by preference.
-If UID or GID information is not set in Redis and Firestore is configured (which is the case for general access deployments), those values are taken from Firestore.
+If UID or GID information is not set in Redis and Firestore is configured (which is the case for deployments using CILogon and COmanage), those values are taken from Firestore.
 For data not present in Redis or Firestore (if configured), LDAP is queried for the information.
 In other words, Gafaelfawr uses any data stored with the token in Redis by preference, then Firestore (if configured), then LDAP (if configured).
 
 If LDAP is not configured and no source of that data was found, that data element is empty, is not included in API responses, and is not set in the relevant HTTP header (if any).
 
-For general access deployments, none of these fields are set during token creation.
+In CILogon and COmanage deployments, none of these fields are set during token creation.
 All data comes from Firestore or LDAP.
-For GitHub deployments, all of these fields are set (if the data is available; in the case of name and email, it may not be).
-For OpenID Connect deployments, whether a field is set depends on whether that field is configured to come from LDAP or Firestore, or to come from the OpenID Connect token claims.
+In GitHub deployments, all of these fields are set (if the data is available; in the case of name and email, it may not be).
+In OpenID Connect deployments, whether a field is set depends on whether that field is configured to come from LDAP or Firestore, or to come from the OpenID Connect token claims.
 In the latter case, the information is stored with the token.
 Child tokens and user tokens created from a token with user identity information will have that identity information copied into the data stored for the newly-created token in Redis.
 
@@ -859,7 +864,7 @@ This cookie is marked ``Secure`` and ``HttpOnly``.
 Firestore
 ---------
 
-General access Science Platform deployments use Firestore to manage UID and GID assignment, since COmanage is not well-suited for doing this.
+CILogon and COmanage Science Platform deployments use Firestore to manage UID and GID assignment, since COmanage is not well-suited for doing this.
 These assignments are stored in `Google Firestore`_, which is a NoSQL document database.
 
 .. _Google Firestore: https://cloud.google.com/firestore
