@@ -82,11 +82,16 @@ The other supported deployment options are an OAuth 2.0 authentication request t
 
 Once the user has been authenticated, their identity must be associated with additional information: full name, email address, numeric UID, primary GID, group membership, and numeric GIDs for the groups.
 In deployments using federated identity, most of this data comes from :ref:`COmanage <comanage-idm>` (via LDAP), and numeric UIDs and GIDs come from :ref:`Firestore <firestore>`.
-For GitHub deployments, access to the user's profile and organization membership is requested as part of the OAuth 2.0 request, and then retrieved after authentication with the token obtained by the OAuth 2.0 authentication.  See :ref:`GitHub <github>` for more details.
-For federated identity and GitHub deployments, the primary GID is the user's user private group (see :ref:`User private groups <user-private-groups>`).
+For GitHub deployments, access to the user's profile and organization membership is requested as part of the OAuth 2.0 request, and then retrieved after authentication with the token obtained by the OAuth 2.0 authentication.
+See :ref:`GitHub <github>` for more details.
 With OpenID Connect, this information is either extracted from the claims of the JWT_ issued as a result of the OpenID Connect authentication flow, or is retrieved from LDAP.
 
 .. _JWT: https://datatracker.ietf.org/doc/html/rfc7519
+
+A primary GID must be provided for each user (apart from service tokens for service-to-service access).
+For federated identity and GitHub deployments, the primary GID is the user's user private group (see :ref:`User private groups <user-private-groups>`).
+For deployments that use a local identity provider, the primary GID must be provided as part of the user's identity information.
+Currently, the only supported way of providing this is via LDAP.
 
 See DMTN-225_ for more details on the identity information stored for each user and its sources.
 
@@ -247,20 +252,16 @@ User private groups
 
 For federated identity and GitHub deployments, every user is automatically also a member (and the only member) of a group whose name matches the username and whose GID matches the user's UID.
 This is called a user private group.
-The GID of this group is also the user's primary GID and should be their default group for services with POSIX file system access, such as the :ref:`Notebook Aspect <notebook-aspect>`.
 This allows Science Platform services to use the user's group membership for authorization decisions without separately tracking authorization rules by username, since access to a specific user can be done by granting access to that user's user private group (which will contain only that one member).
+The GID of this group is also the user's primary GID and should be their default group for services with POSIX file system access, such as the :ref:`Notebook Aspect <notebook-aspect>`.
 
 For GitHub deployments, the user's account ID (used for their UID) is also used for the GID for their user private group.
 This risks a conflict, since the user account ID space is not distinct from the team ID space, which is used for the GIDs of all other groups.
 If a user's account ID happens to be the same number as a team ID, members of that team could have access to the user's group-accessible files, or the user may incorrectly have access to that team's files.
 We are currently ignoring this potential conflict on the grounds that, given the sizes of the spaces involved and the small number of users on GitHub deployments, it's unlikely to happen in practice.
 
-Use of user private groups is not required.
-Deployments that use OpenID Connect with a local identity provider that doesn't provide user private groups may choose not to implement them.
-If UIDs are allocated from LDAP and the UID space is not distinct from the GID space, it may be impossible to configure user private groups unless they are present in LDAP, since the only way Gafaelfawr supports sythesizing them is by creating a group with the same GID as the user's UID.
-
-Deployments with OpenID Connect do need to provide the user's primary GID via LDAP, whether or not that corresponds to a user private group.
-Otherwise, services that require a primary GID, such as the Notebook Aspect, will not work.
+Deployments that use OpenID Connect with a local identity provider may or may not provide user private groups.
+If they do not, access control by username may not work, since services may implement that access control by checking only group membership.
 
 Authentication flows
 ====================
@@ -681,8 +682,7 @@ Information from the authentication session state is used when spawning a user l
    Sequence diagram of the authentication flow between Gafaelfawr, JupyterHub, and the lab.
    This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (see :ref:`Browser flows <browser-flows>`).
 
-The lab itself is spawned running with the UID and GID of the user, so that any accesses to mounted POSIX file systems are accessed as the identity of the user.
-JupyterHub therefore requires the UID and primary GID for users to be set, and cannot spawn pods for users that do not have that information.
+The lab itself is spawned using the UID and primary GID of the user, so that any accesses to mounted POSIX file systems are accessed as the identity of the user.
 The GIDs of the user's other groups are added as supplemental groups for the lab process.
 
 Because JupyterHub has its own authentication session that has to be linked to the Gafaelfawr authentication session, there are a few wrinkles here that require special attention.
@@ -785,8 +785,7 @@ For data not present in Redis or Firestore (if configured), LDAP is queried for 
 In other words, Gafaelfawr uses any data stored with the token in Redis by preference, then Firestore (if configured), then LDAP (if configured).
 
 If LDAP is not configured and no source of that data was found, that data element is empty, is not included in API responses, and is not set in the relevant HTTP header (if any).
-This may mean that some services will not function for that user.
-For example, the Notebook Aspect requires the UID and GID to be set.
+For UID and GID, this is generally an error, except for synthetic users and service tokens that are only used in contexts where no POSIX file system access is done and thus UID and GID are not necessary.
 
 In CILogon and COmanage deployments, none of these fields are set during token creation.
 All data comes from Firestore or LDAP.
