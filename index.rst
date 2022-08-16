@@ -250,15 +250,17 @@ This is called a user private group.
 The GID of this group is also the user's primary GID and should be their default group for services with POSIX file system access, such as the :ref:`Notebook Aspect <notebook-aspect>`.
 This allows Science Platform services to use the user's group membership for authorization decisions without separately tracking authorization rules by username, since access to a specific user can be done by granting access to that user's user private group (which will contain only that one member).
 
-Use of user private groups is not required.
-Deployments that use OpenID Connect with a local identity provider that doesn't provide user private groups may choose not to implement them.
-In those cases, the local identity provider should provide the user's primary GID via LDAP, since it otherwise won't be set.
-(Or, alternately, that deployment can avoid running any services, such as the Notebook Aspect, that require a primary GID.)
-
 For GitHub deployments, the user's account ID (used for their UID) is also used for the GID for their user private group.
 This risks a conflict, since the user account ID space is not distinct from the team ID space, which is used for the GIDs of all other groups.
 If a user's account ID happens to be the same number as a team ID, members of that team could have access to the user's group-accessible files, or the user may incorrectly have access to that team's files.
 We are currently ignoring this potential conflict on the grounds that, given the sizes of the spaces involved and the small number of users on GitHub deployments, it's unlikely to happen in practice.
+
+Use of user private groups is not required.
+Deployments that use OpenID Connect with a local identity provider that doesn't provide user private groups may choose not to implement them.
+If UIDs are allocated from LDAP and the UID space is not distinct from the GID space, it may be impossible to configure user private groups unless they are present in LDAP, since the only way Gafaelfawr supports sythesizing them is by creating a group with the same GID as the user's UID.
+
+Deployments with OpenID Connect do need to provide the user's primary GID via LDAP, whether or not that corresponds to a user private group.
+Otherwise, services that require a primary GID, such as the Notebook Aspect, will not work.
 
 Authentication flows
 ====================
