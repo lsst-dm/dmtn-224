@@ -42,6 +42,7 @@ with Diagram(
         with Cluster("Authentication"):
             ui = React("Gafaelfawr UI")
             gafaelfawr = KubernetesEngine("Gafaelfawr")
+            maintenance = KubernetesEngine("Gafaelfawr\nmaintenance")
             storage = SQL("Database")
             redis = KubernetesEngine("Redis")
             redis_storage = PersistentDisk("Redis storage")
@@ -69,6 +70,7 @@ with Diagram(
     user >> ingress >> ui >> gafaelfawr >> redis >> redis_storage
     ingress >> gafaelfawr >> storage
     ingress << gafaelfawr
+    maintenance >> storage
     ingress >> hub >> session_storage
     ingress >> lab >> filestore
     lab << hub
