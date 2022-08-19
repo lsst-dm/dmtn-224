@@ -1259,6 +1259,17 @@ Unfortunately, this still doesn't work if Kubernetes replaces the original clien
 Therefore, source NAT also has to be disabled for inbound connections to the NGINX ingress.
 That's done with the ``externalTrafficPolicy`` setting described above.
 
+Monitoring
+==========
+
+The primary monitoring for Gafaelfawr is mobu_, the continuous integration test system for the Rubin Science Platform.
+It uses the token API to create tokens for bot users and then uses those tokens to interact with various Science Platform services, which in turn tests routine authentication and authorization checks.
+Problmes are reported to a Slack channel via a Slack incoming webhook.
+
+.. _mobu: https://github.com/lsst-sqre/mobu
+
+Gafaelfawr also supports notifying a Slack channel (also via an incoming webhook) for uncaught exceptions.
+
 .. _references:
 
 References
