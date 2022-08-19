@@ -921,6 +921,16 @@ There is no mechanism for deleting or reusing UIDs or GIDs; any unknown user or 
 Gafaelfawr uses workload identity to authenticate to the Firestore database.
 The Firestore database is managed in a separate GCS project dedicated to Firestore, which is a best practice for Firestore databases since it is part of App Engine and only one instance is permitted per project.
 
+Periodic maintenance
+--------------------
+
+Gafaelfawr also installs a Kubernetes ``CronJob`` that runs hourly to perform periodic maintenance on its data stores.
+
+#. Delete SQL database entries for tokens that have expired, and add token change history entries noting the expiration.
+   Tokens have an expiration set for their Redis key matching the underlying expiration of the token, so Redis doesn't need similar maintenance.
+#. Delete old entries from history tables to keep them from growing without bound.
+   Only the past year of token change history is kept.
+
 .. _bootstrapping:
 
 Bootstrapping
