@@ -46,6 +46,7 @@ with Diagram(
         with Cluster("Gafaelfawr"):
             ui = React("Gafaelfawr UI")
             gafaelfawr = KubernetesEngine("Gafaelfawr")
+            maintenance = KubernetesEngine("Gafaelfawr\nmaintenance")
             redis = KubernetesEngine("Redis")
             redis_storage = PersistentDisk("Redis storage")
             database = SQL("Database")
@@ -60,3 +61,4 @@ with Diagram(
     ingress << gafaelfawr
     gafaelfawr >> redis >> redis_storage
     gafaelfawr >> ldap
+    maintenance >> database
