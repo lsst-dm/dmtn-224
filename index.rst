@@ -90,8 +90,7 @@ With OpenID Connect, this information is either extracted from the claims of the
 
 A primary GID must be provided for each user (apart from service tokens for service-to-service access).
 For federated identity and GitHub deployments, the primary GID is the user's user private group (see :ref:`User private groups <user-private-groups>`).
-For deployments that use a local identity provider, the primary GID must be provided as part of the user's identity information.
-Currently, the only supported way of providing this is via LDAP.
+For deployments that use a local identity provider, the primary GID must come from either a claim in the OpenID Connect ID token or from LDAP.
 
 See DMTN-225_ for more details on the identity information stored for each user and its sources.
 
@@ -261,6 +260,7 @@ If a user's account ID happens to be the same number as a team ID, members of th
 We are currently ignoring this potential conflict on the grounds that, given the sizes of the spaces involved and the small number of users on GitHub deployments, it's unlikely to happen in practice.
 
 Deployments that use OpenID Connect with a local identity provider may or may not provide user private groups.
+This will depend on the details of GID assignment and group management in the local identity provider.
 If they do not, access control by username may not work, since services may implement that access control by checking only group membership.
 
 Authentication flows
@@ -412,6 +412,10 @@ Changes in LDAP are therefore reflected immediately in the Science Platform (aft
 
 If instead the user's identity information comes from the JWT issued by the OpenID Connect authentication process, that data is stored with the token and inherited by any other child tokens of the session token, or any user tokens created using that session token, similar to how data from GitHub is handled.
 
+Group membership obtained from the OpenID Connect token may or may not include GIDs for each group.
+Missing GIDs are not considered an error, and scopes will still be calculated correctly for groups without GIDs, but no GIDs for groups will be provided to other services.
+This may prevent using groups for access control for services that use a POSIX file system, such as the :ref:`Notebook Aspect <notebook-aspect>`.
+
 Logout flow
 ^^^^^^^^^^^
 
@@ -488,6 +492,7 @@ In the latter case, whichever of the username or password that is not set to the
 Gafaelfawr returns a 401 response code from the auth subrequest if no ``Authorization`` header is present, and a 403 response code if credentials are provided but not valid.
 In both cases, this is accompanied by a ``WWW-Authenticate`` challenge.
 By default, this is an `RFC 6750`_ bearer token challenge, but Gafaelfawr can be configured to return a `RFC 7617`_ HTTP Basic Authentication challenge instead (via a parameter to the ``/auth`` route, when it is configured in the ``Ingress`` as the auth subrequest handler).
+Currently, however, that ``WWW-Authenticate`` header and the details of a 403 error are not correctly conveyed to the client due to limitations in the NGINX configuration.
 
 Gafaelfawr returns a 200 response code if the credentials are valid, which tells ingress-nginx to pass the request (possibly with additional headers) to the protected service.
 
@@ -684,6 +689,7 @@ Information from the authentication session state is used when spawning a user l
 
 The lab itself is spawned using the UID and primary GID of the user, so that any accesses to mounted POSIX file systems are accessed as the identity of the user.
 The GIDs of the user's other groups are added as supplemental groups for the lab process.
+Note that if NFS is used as the underlying POSIX file system, it may impose a limit on the maximum number of supported supplemental groups.
 
 Because JupyterHub has its own authentication session that has to be linked to the Gafaelfawr authentication session, there are a few wrinkles here that require special attention.
 
@@ -777,7 +783,7 @@ This information comes from OpenID Connect claims or from GitHub queries for inf
 - **email**: The user's email address
 - **uid**: The user's unique numeric UID
 - **gid**: The user's primary GID
-- **groups**: The user's group membership as a list of dicts with two keys, **name** and **id** (the unique numeric GID of the group)
+- **groups**: The user's group membership as a list of dicts with two keys, **name** and **id** (the unique numeric GID of the group), where the **id** key is optional
 
 If this data is set in Redis, that information is used by preference.
 If UID or GID information is not set in Redis and Firestore is configured (which is the case for deployments using CILogon and COmanage), those values are taken from Firestore, and the user's primary GID is set to the same as their UID.
