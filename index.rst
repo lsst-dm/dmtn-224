@@ -1276,6 +1276,9 @@ Problmes are reported to a Slack channel via a Slack incoming webhook.
 
 Gafaelfawr also supports notifying a Slack channel (also via an incoming webhook) for uncaught exceptions.
 
+Once a day, a ``CronJob`` resource runs an audit check on Gafaelfawr's data sources looking for inconsistencies.
+Any found are reported to a Slack channel if the Slack incoming webhook is configured.
+
 .. _references:
 
 References
