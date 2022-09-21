@@ -650,7 +650,7 @@ Specific services
 =================
 
 The general pattern for protecting a service with authentication and access control is configure its ``Ingress`` resources with the necessary ingress-nginx annotations and then let Gafaelfawr do the work.
-If the service needs information about the user, it obtains that from the ``X-Auth-Request-*`` headers that are set by Gafaelfawr via ingress-nginx.
+If the service needs information about the user, it obtains that from the ``X-Auth-Request-*`` headers that are set by Gafaelfawr via ingress-nginx, or by requesting a delegated token and then using the token API to retrieve details about the token or the user's identity information.
 However, some Science Platform services require additional special attention.
 
 .. _notebook-aspect:
@@ -1181,47 +1181,7 @@ Gafaelfawr or other identity management errors are logged at the ``ERROR`` level
 .. _structlog: https://www.structlog.org/en/stable/
 .. _uvicorn: https://www.uvicorn.org/
 
-Log attributes
---------------
-
-The main log message will be in the ``event`` attribute of each log message.
-If this message indicates an error with supplemental information, the additional details of the error will be in the ``error`` attribute.
-
-Gafaelfawr will add some consistent attributes to log messages, in addition to the default attributes `added by Safir <https://safir.lsst.io/logging.html>`__.
-All authenticated routes add the following attributes once the user's token has been located and verified:
-
-``scope``
-    The scopes of the authentication token.
-
-``token``
-    The key of the authentication token.
-
-``token_source``
-    Where the token was found.
-    Chosen from ``cookie`` (found in the session cookie), ``bearer`` (provided as a bearer token in an ``Authorization`` header), or ``basic-username`` or ``basic-password`` (provided as the username or password in an HTTP Basic ``Authorization`` header).
-
-``user``
-    The username of the token.
-
-The ``/auth`` route adds the following attributes:
-
-``auth_uri``
-    The URL being authenticated.
-    This is the URL (withough the scheme and host) of the original request that Gafaelfawr is being asked to authenticate via a subrequest.
-    This will be ``NONE`` if the request was made directly to the ``/auth`` endpoint (which should not happen in normal usage, but may happen during testing).
-
-``required_scope``
-    The list of scopes required, taken from the ``scope`` query parameter
-
-``satisfy``
-    The authorization strategy, taken from the ``satisfy`` query parameter.
-
-The ``/login`` route adds the following attributes:
-
-``return_url``
-    The URL to which the user will be sent after successful authentication.
-
-Some actions will add additional structured data appropriate to that action.
+For a detailed description of the attributes included in logs, see the Gafaelfawr_ documentation.
 
 .. _client-ips:
 
