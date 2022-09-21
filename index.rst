@@ -725,6 +725,10 @@ Since the Portal Aspect supports using other public TAP and image services in ad
 Currently, this is done via a whitelist of domains in the Science Platform deployment configuration.
 The Portal Aspect includes the token in all requests to those domains.
 
+The Portal Aspect wants several scopes for its delegated token so that it can perform operations on the user's behalf, but it is still usable without those scopes.
+It therefore takes advantage of Gafaelfawr's support for requesting delegated scopes that may or may not be available.
+If the user's authenticating token has the scopes it prefers, it gets an internal token with those scopes; otherwise, it gets an internal token with whatever subset of the scopes the user has, but the authentication still succeeds as long as the user has ``exec:portal`` access (the scope used to control all access to the Portal Aspect).
+
 Storage
 =======
 
