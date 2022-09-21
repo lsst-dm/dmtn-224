@@ -710,7 +710,8 @@ Without that caching, there would be unnecessary churn of the JupyterHub authent
 
 The notebook token is only injected into the lab when the lab is spawned, so it's possible for the token in a long-running lab to expire.
 If the user's overall Gafaelfawr session has expired, they will be forced to reauthenticate and their JupyterHub authentication state will then be updated via JupyterHub's authentication refresh, but the new stored token won't propagate automatically to the lab.
-This is currently an open issue, worked around by setting a timeout on labs so that the user is forced to stop and restart the lab rather than keeping the same lab running indefinitely.
+To address this, JupyterHub requests a minimum remaining lifetime for the delegated notebook token, ensuring that any freshly-spawned lab has a minimum lifetime for its saved credentials.
+The lab is then configured to have a maximum age matching that minimum lifetime, so by the time the token would expire the lab is automatically shut down by JupyterHub and the user is forced to spawn a new one with fresh credentials.
 
 Portal Aspect
 -------------
