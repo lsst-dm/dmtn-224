@@ -650,7 +650,7 @@ Specific services
 =================
 
 The general pattern for protecting a service with authentication and access control is configure its ``Ingress`` resources with the necessary ingress-nginx annotations and then let Gafaelfawr do the work.
-If the service needs information about the user, it obtains that from the ``X-Auth-Request-*`` headers that are set by Gafaelfawr via ingress-nginx.
+If the service needs information about the user, it obtains that from the ``X-Auth-Request-*`` headers that are set by Gafaelfawr via ingress-nginx, or by requesting a delegated token and then using the token API to retrieve details about the token or the user's identity information.
 However, some Science Platform services require additional special attention.
 
 .. _notebook-aspect:
