@@ -522,6 +522,7 @@ The criteria for reusing a notebook token is:
 #. Parent token's scopes are still a superset of the child token's scopes
 #. Child token is still valid
 #. Child token has a remaining lifetime of at least half the normal token lifetime (or the lifetime of the parent token, whichever is shorter)
+#. Child token has a remaining lifetime of at least as long as the requested minimum remaining lifetime, if one was set.
 
 To reuse an internal token, it must meet the same criteria, plus:
 
@@ -533,8 +534,8 @@ If a notebook or internal token already exists that meet these criteria, that to
 Notebook and internal tokens are also cached to avoid the SQL and Redis queries required to find a token that can be reused.
 See :ref:`Caching <caching>` for more information.
 
-``NetworkPolicy``
------------------
+Network policy
+--------------
 
 Both the browser and the token flows depend require that all access to the service, including access internal to the Kubernetes cluster, go through the ingress.
 The ingress is responsible for querying Gafaelfawr for authentication and scope-level access control.
@@ -1020,8 +1021,8 @@ Gafaelfawr also runs a Kubernetes controller that maintains some Kubernetes reso
 
 .. _gafaelfawrservicetoken:
 
-GafaelfawrServiceToken
-----------------------
+Service tokens
+--------------
 
 Normally, protected services will request a delegated token on behalf of the user and make other API calls using that token.
 However, in some cases services will need to make calls on their own behalf.
