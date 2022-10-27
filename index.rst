@@ -1017,7 +1017,10 @@ The operation protected by the lock is then performed, and the per-user lock is 
 Kubernetes resources
 ====================
 
-Gafaelfawr also runs a Kubernetes controller that maintains some Kubernetes resources for Science Platform services.
+Gafaelfawr also runs a Kubernetes operator that maintains some Kubernetes resources for Science Platform services.
+The Kubernetes operator uses Kopf_ to handle the machinery of processing updates and recording status in Kubernetes objects.
+
+.. _Kopf: https://kopf.readthedocs.io/en/stable/
 
 .. _gafaelfawrservicetoken:
 
@@ -1054,11 +1057,10 @@ Any labels or annotations on the ``GafaelfawrServiceToken`` resource will be cop
 The ``Secret`` will be marked as owned by the ``GafaelfawrServiceToken`` resource, so it will be automatically deleted by Kubernetes if the parent resource is deleted.
 
 Gafaelfawr will watch for any modifications to the ``GafaelfawrServiceToken`` resource and update the ``Secret`` resource accordingly.
-On startup, it will also check all ``Secret`` resources associated with ``GafaelfawrServiceToken`` resources and ensure that the tokens are still valid.
-(They could become invalid if, say, the Redis store for Gafaelfawr was reset.)
 
-Due to limitations in the current design of this Kubernetes controller, Gafaelfawr will not notice changes to the generated ``Secret`` resource, such as its deletion.
-It will only react to changes to the ``GafaelfawrServiceToken`` resource.
+Gafaelfawr does not monitor changes to the generated ``Secret`` resource, such as deletion, and therefore will not react to them immediately.
+However, every 30 minutes it will also check all ``Secret`` resources associated with ``GafaelfawrServiceToken`` resources and ensure that they are present and the tokens are still valid, regenerating them if necessary.
+(They could become invalid if, say, the Redis store for Gafaelfawr was reset.)
 
 Token API
 =========
