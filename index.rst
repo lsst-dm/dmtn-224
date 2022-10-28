@@ -1273,11 +1273,16 @@ SQR-044_
     Requirements for the identity management system.
     This document is now incomplete and partly out of date, but still provides useful detail of requirements that have not yet been incorporated into the design.
 
+SQR-071_
+    Proposed design for supporting user impersonation by administrators.
+    If implemented, the details as implemented will be incorporated into this document and DMTN-234_.
+
 .. _DMTN-169: https://dmtn-169.lsst.io/
 .. _DMTN-182: https://dmtn-182.lsst.io/
 .. _DMTN-225: https://dmtn-225.lsst.io/
 .. _DMTN-234: https://dmtn-234.lsst.io/
 .. _SQR-044: https://sqr-044.lsst.io/
+.. _SQR-071: https://sqr-071.lsst.io/
 
 Security
 --------
