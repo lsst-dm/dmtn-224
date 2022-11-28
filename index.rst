@@ -16,7 +16,7 @@ For a list of remaining work, see the `remaining work section of SQR-069 <https:
 .. note::
 
    This is part of a tech note series on identity management for the Rubin Science Platform.
-   The other primary documents are DMTN-234_, which describes the high-level design; and SQR-069_, which provides a history and analysis of the decisions underlying the design and implementation.
+   The other primary documents are :dmtn:`234`, which describes the high-level design; and :sqr:`069`, which provides a history and analysis of the decisions underlying the design and implementation.
    See :ref:`References <references>` for a complete list of related documents.
 
 Implementation overview
@@ -43,7 +43,7 @@ Here is that architecture in diagram form:
    An overview of a Rubin Science Platform deployment.
    This shows the major aspects of the Science Platform but omits considerable detail, including most supporting services, the identity management store, and some details of the Gafaelfawr architecture.
 
-As discussed in DMTN-234_, there is no single Rubin Science Platform.
+As discussed in :dmtn:`234`, there is no single Rubin Science Platform.
 There are multiple deployments of the Science Platform at different sites with different users and different configurations.
 With respect to the identity management system, these differ primarily in the choice of the first two components.
 
@@ -92,7 +92,7 @@ A primary GID must be provided for each user (apart from service tokens for serv
 For federated identity and GitHub deployments, the primary GID is the user's user private group (see :ref:`User private groups <user-private-groups>`).
 For deployments that use a local identity provider, the primary GID must come from either a claim in the OpenID Connect ID token or from LDAP.
 
-See DMTN-225_ for more details on the identity information stored for each user and its sources.
+See :dmtn:`225` for more details on the identity information stored for each user and its sources.
 
 .. _comanage-idm:
 
@@ -121,7 +121,7 @@ CILogon then adds that username as the ``username`` claim in the JWT provided to
 If that claim is missing, the user is not registered, and Gafaelfawr then redirects them to an :ref:`onboarding flow <comanage-onboarding>`.
 Otherwise, Gafaelfawr retrieves group information from LDAP and then uses that to assign scopes to the newly-created session token (see :ref:`Browser flows <browser-flows>`).
 
-For the precise details of how COmanage is configured, see SQR-055_.
+For the precise details of how COmanage is configured, see :sqr:`055`.
 
 .. _comanage-onboarding:
 
@@ -129,10 +129,10 @@ COmanage onboarding
 ^^^^^^^^^^^^^^^^^^^
 
 If the user is not already registered in COmanage, they will be redirected to an onboarding flow in the COmanage web UI.
-We use the "Self Signup With Approval" flow, one of the standard COmanage enrollment flows, with some modifications detailed in SQR-055_.
+We use the "Self Signup With Approval" flow, one of the standard COmanage enrollment flows, with some modifications detailed in :sqr:`055`.
 This will use their identity information from CILogon and prompt them for their preferred name, email address, and username.
 They will be required to confirm that they can receive email at the email address they give.
-The choice of username is subject to constraints specified in DMTN-225_.
+The choice of username is subject to constraints specified in :dmtn:`225`.
 The user's COmanage account will then be created in a pending state, and must be approved by an authorized approver before it becomes active and is provisioned in LDAP (and thus allows access to the Science Platform).
 
 The web pages shown during this onboarding flow are controlled by the style information in the `lsst-registry-landing <https://github.com/cilogon/lsst-registry-landing>`__ project on GitHub.
@@ -432,7 +432,7 @@ Redirect restrictions
 The ``/login`` and ``/logout`` routes redirect the user after processing.
 The URL to which to redirect the user may be specified as a ``GET`` parameter or, in the case of ``/login``, an HTTP header that is normally set by ingress-nginx.
 To protect against open redirects, the specified redirect URL must be on the same host as the host portion of the incoming request for the ``/login`` or ``/logout`` route.
-(This is expected to change in the future when the more complex domain scheme proposed in DMTN-193_ is adopted.)
+(This is expected to change in the future when the more complex domain scheme proposed in :dmtn:`193` is adopted.)
 
 ``X-Forwarded-Host`` headers (expected to be set by ingress-nginx) are trusted for the purposes of determining the host portion of the request.
 ``Forwarded`` appears not to be supported by the NGINX ingress at present and therefore is not used.
@@ -923,7 +923,7 @@ Each document has one key, ``gid``, which stores the GID assigned to that group.
 
 The ``counters`` collection holds three documents, ``bot-uid``, ``uid``, and ``gid``.
 Each document has one key, ``next``, which is the next unallocated UID or GID for that class of users or groups.
-They are initialized with the start of the ranges defined in DMTN-225_.
+They are initialized with the start of the ranges defined in :dmtn:`225`.
 
 If a user or group is not found, it is allocated a new UID or GID inside a transaction, linked with the update of the corresponding counter.
 If another Gafaelfawr instance allocates a UID or GID from the same space at the same time, the transaction will fail and is automatically retried.
@@ -1255,46 +1255,36 @@ References
 Design
 ------
 
-DMTN-169_
+:dmtn:`169`
     Proposed design for access control to Butler, the system that manages read and write access to Rubin Observatory data.
 
-DMTN-182_
-    Supplements DMTN-169_ with a design for how Butler should make access control decisions for a given operation.
+:dmtn:`182`
+    Supplements `dmtn:`169` with a design for how Butler should make access control decisions for a given operation.
     Proposes that all access control decisions should be based on the user's group membership as exposed by the identity management system.
 
-DMTN-225_
+:dmtn:`225`
     Metadata gathered and stored for each user, including constraints such as valid username and group name patterns and UID and GID ranges.
 
-DMTN-234_
+:dmtn:`234`
     High-level design for the Rubin Science Platform identity management system.
     This is the document to read first to understand the overall system.
 
-SQR-044_
+:sqr:`044`
     Requirements for the identity management system.
     This document is now incomplete and partly out of date, but still provides useful detail of requirements that have not yet been incorporated into the design.
 
-SQR-071_
+:sqr:`071`
     Proposed design for supporting user impersonation by administrators.
-    If implemented, the details as implemented will be incorporated into this document and DMTN-234_.
-
-.. _DMTN-169: https://dmtn-169.lsst.io/
-.. _DMTN-182: https://dmtn-182.lsst.io/
-.. _DMTN-225: https://dmtn-225.lsst.io/
-.. _DMTN-234: https://dmtn-234.lsst.io/
-.. _SQR-044: https://sqr-044.lsst.io/
-.. _SQR-071: https://sqr-071.lsst.io/
+    If implemented, the details as implemented will be incorporated into this document and :dmtn:`234`.
 
 Security
 --------
 
-DMTN-193_
+:dmtn:`193`
     General discussion of web security for the Science Platform, which among other topics suggests additional design considerations for the Science Platform ingress, authentication layer, and authorization layer.
 
-SQR-051_
+:sqr:`051`
     Discussion of credential leaks from the authentication system to backend services, and possible fixes and mitigations.
-
-.. _DMTN-193: https://dmtn-193.lsst.io/
-.. _SQR-051: https://sqr-051.lsst.io/
 
 Implementation details
 ----------------------
@@ -1302,18 +1292,14 @@ Implementation details
 The tech note you are reading is the primary document for the implementation details of the Science Platform.
 Other implementation tech notes are:
 
-DMTN-235_
+:dmtn:`235`
     Lists the token scopes used by the identity management system, defines them, and documents the services to which they grant access.
 
-SQR-055_
+:sqr:`055`
     How to configure COmanage for the needs of the identity management component of the Science Platform.
 
-SQR-069_
+:sqr:`069`
     Documents the decisions, trade-offs, and analysis behind the current design and implementation of the identity management system.
-
-.. _DMTN-235: https://dmtn-235.lsst.io/
-.. _SQR-055: https://sqr-055.lsst.io/
-.. _SQR-069: https://sqr-069.lsst.io/
 
 Operations
 ----------
@@ -1334,58 +1320,47 @@ Project documents
 
 These are higher-level documents discussing Vera C. Rubin Observatory and the Science Platform as a whole that contain information relevant to the design and implementation of the identity management system.
 
-LDM-554_
+:ldm:`554`
     General requirements document for the Science Platform.
     This includes some requirements for the identity management system.
 
-LSE-279_
+:lse:`279`
     General discussion of authentication and authorization for Vera C. Rubin Observatory.
     This is primarily a definition of terms and very high-level requirements for identity management.
-    The group naming scheme described in this document has been replaced with the scheme in DMTN-235_.
+    The group naming scheme described in this document has been replaced with the scheme in :dmtn:`235`.
 
-LPM-121_
+:lpm:`121`
     Information security policy and procedures for Vera C. Rubin Observatory.
     This document is primarily concerned with defining roles and responsibilities.
 
 RDO-013_
     The Vera C. Rubin Observatory Data Policy, which defines who will have access to Rubin Observatory data.
 
-.. _LDM-554: https://ldm-554.lsst.io/
-.. _LSE-279: https://docushare.lsst.org/docushare/dsweb/Get/LSE-279
-.. _LPM-121: https://docushare.lsst.org/docushare/dsweb/Get/LPM-121
 .. _RDO-013: https://docushare.lsst.org/docushare/dsweb/Get/RDO-13
 
 Vendor evaluations
 ------------------
 
-SQR-045_
+:sqr:`045`
     Evaluation of CILogon COmanage for use as the basis of user identity management and group management.
 
-SQR-046_
+:sqr:`046`
     Evaluation of GitHub for use as the basis of user identity management and group management.
-
-.. _SQR-045: https://sqr-045.lsst.io/
-.. _SQR-046: https://sqr-046.lsst.io/
 
 History
 -------
 
-DMTN-094_
+:dmtn:`094`
     Original design document for the identity management system, now superseded and of historical interest only.
 
-DMTN-116_
+:dmtn:`116`
     Original implementation strategy for the identity management system, now superseded and of historical interest only.
 
-SQR-039_
+:sqr:`039`
     Problem statement and proposed redesign for the identity management system, which led (with numerous modifications) to the current design.
     This document contains a detailed discussion of the decision not to use :abbr:`JWTs (JSON Web Tokens)` in the authentication system, and to keep authorization information such as group credentials out of the authentication tokens.
 
-SQR-049_
+:sqr:`049`
     Original design of the token management system for the Science Platform, including its API and storage model.
     This has now been superseded by this document, and the API description there has been superseded by the API described in the Gafaelfawr_ documentation.
     Still of possible interest in this document are the Kafka design, the specification for the housekeeping process, the API for authentication history, and the details of the desired token UI.
-
-.. _DMTN-094: https://dmtn-094.lsst.io/
-.. _DMTN-116: https://dmtn-116.lsst.io/
-.. _SQR-039: https://sqr-039.lsst.io/
-.. _SQR-049: https://sqr-049.lsst.io/
