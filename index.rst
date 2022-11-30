@@ -139,9 +139,12 @@ Approvers are notified via email by COmanage that a new user is awaiting approva
 Approval will be based on the institutional affiliation information collected by COmanage from the identity information released by the user's identity provider via CILogon.
 Approvers may have to reach out to the prospective user or their institution to gather additional information before deciding whether the user has data rights.
 
-Once the user is approved, the approver will add them to a group appropriate for their data rights access.
+Once the user is approved, they will typically be added automatically to a general users group.
+(The exact configuration may vary by deployment of the Science Platform.)
+The approver may want or need to add them to additional groups depending on their intended role.
+
 The user will be notified of their approval via email.
-They will then be able to return to the Science Platform deployment and log in, and CILogon will now release their username in the ``username`` claim, allowing Gafaelfawr to look up their identity information in the LDAP server populated by COmanage, assign them scopes, and allow them to continue to the Science Platform.
+They will then be able to return to the Science Platform deployment and log in, and CILogon will now release their username in the ``username`` claim, allowing Gafaelfawr to look up their identity information and group membership in the LDAP server populated by COmanage, assign them scopes, and allow them to continue to the Science Platform.
 
 COmanage user UI
 ^^^^^^^^^^^^^^^^
@@ -267,7 +270,8 @@ Authentication flows
 This section assumes the COmanage account for the user already exists if COmanage is in use.
 If it does not, see :ref:`comanage-onboarding`.
 
-See the Gafaelfawr_ documentation for specific details on the ingress-nginx annotations used to protect services and the HTTP headers that are set and available to be passed down to the service after successful authentication.
+See the `Gafaelfawr documentation <https://gafaelfawr.lsst.io/>`__ for specific details on the ingress-nginx_ annotations used to protect services and the HTTP headers that are set and available to be passed down to the service after successful authentication.
+The preferred way to create the ingress annotations is to use a ``GafaelfawrIngress`` custom resource (see :ref:`gafaelfawringress`), but the annotations can also be added directly if necessary.
 
 .. _browser-flows:
 
@@ -471,8 +475,12 @@ This route can be configured as a custom 403 handler in the ``Ingress`` resource
    nginx.ingress.kubernetes.io/configuration-snippet: |
      error_page 403 = "/auth/forbidden?scope=<scope>";
 
+The recommended way to do this is with the ``config.replace403`` setting in a ``GafaelfawrIngress`` custom resource.
+
 Note the parameters (here just ``scope``), which should be set to the same parameters that were passed to the Gafaelfawr ``/auth`` endopint using the ``nginx.ingress.kubernetes.io/auth-url`` annotation.
+(This is handled automatically when the ingress is generated from a ``GafaelfawrIngress`` resource.)
 This allows Gafaelfawr to construct an accurate ``WWW-Authenticate`` header.
+
 This route returns a response with a ``Cache-Control`` saying that it cannot be cached.
 
 There is unfortunately no way to pass the reason for the 403 error to this handler, so it has to blindly assume that the 403 error was due to missing a required scope.
@@ -492,7 +500,7 @@ Currently, however, that ``WWW-Authenticate`` header and the details of a 403 er
 Gafaelfawr returns a 200 response code if the credentials are valid, which tells ingress-nginx to pass the request (possibly with additional headers) to the protected service.
 
 The behavior of redirecting the user to log in if they are not authenticated is implemented in ingress-nginx by configuring its response to a 401 error from the auth subrequest.
-For API services that are not used by browsers, ingress-nginx should not be configured with the ``nginx.ingress.kubernetes.io/auth-signin`` annotation.
+For API services that are not used by browsers, ingress-nginx should not be configured with the ``nginx.ingress.kubernetes.io/auth-signin`` annotation (the ``config.loginRedirect`` setting of a ``GafaelfawrIngress``).
 In this case, it will return the 401 challenge to the client instead of redirecting.
 
 When authenticating a request with a token, Gafaelfawr does not care what type of token is presented.
@@ -666,6 +674,7 @@ In the current Science Platform implementation, that session database is stored 
 The data stored in the authentication session is additionally encrypted with a key known only to JupyterHub.
 
 The ingress for JupyterHub is configured to require Gafaelfawr authentication and access control for all JupyterHub and lab URLs.
+(This is done by adding the necessary annotations as part of the JupyterHub configuration, rather than via a ``GafaelfawrIngress`` custom resource, since the JupyterHub ingress is managed by its own Helm chart.)
 Therefore, regardless of what JupyterHub and the lab think is the state of the user's authentication, the request is not allowed to reach them unless the user is already authenticated, and any redirects to the upstream identity provider are handled before JupyterHub ever receives a request.
 The user is also automatically redirected to the upstream identity provider to reauthenticate if their credentials expire while using JupyterHub.
 The ingress configuration requests a delegated notebook token.
@@ -714,6 +723,9 @@ Portal Aspect
 
 Similar to the Notebook Aspect, the Portal Aspect needs to make API calls on behalf of the user (most notably to the TAP and image API services).
 Unlike the Notebook Aspect, the Portal Aspect uses a regular internal token with appropriate scopes for this.
+
+The Portal Aspect uses ``GafaelfawrIngress`` custom resources to define its ingresses.
+There are two separate ingresses, since the admin API requires different scopes than the user-facing service.
 
 In the Science-Platform-specific modifications to Firefly, the software used to create the Portal Aspect, that internal token is extracted from the ``X-Auth-Request-Token`` header and sent when appropriate in requests to other services.
 Since the Portal Aspect supports using other public TAP and image services in addition to the ones local to the Science Platform deployment in which it's running, it has to know when to send this token in an ``Authorization`` header and when to omit it.
@@ -967,12 +979,14 @@ Gafaelfawr also caches notebook and internal tokens for a specific token to avoi
 
 Gafaelfawr uses the following caches:
 
-* Caches of mappings from parent token parameters to reusable child notebook tokens and internal tokens.
+- Caches of mappings from parent token parameters to reusable child notebook tokens and internal tokens.
   The cache is designed to only return a token if it satisfies the criteria for :ref:`reuse of a notebook or internal token <token-reuse>`.
   Each of these caches holds up to 5,000 entries.
-* Three caches of LDAP data if LDAP is enabled: group membership of a user (including GIDs), group membership of a user (only group names, used for scopes), and user identity information (name, email, and UID, whichever is configured to come from LDAP).
+
+- Three caches of LDAP data if LDAP is enabled: group membership of a user (including GIDs), group membership of a user (only group names, used for scopes), and user identity information (name, email, and UID, whichever is configured to come from LDAP).
   Each of these caches holds up to 1,000 entries, and entries are cached for at most five minutes.
-* Caches of mappings of users to UIDs and group names to GIDs, if Firestore is enabled.
+
+- Caches of mappings of users to UIDs and group names to GIDs, if Firestore is enabled.
   Each of these caches holds up to 10,000 entries.
   Since UIDs and GIDs are expected to never change once assigned, the cache entries never expire for the lifetime of the Gafaelfawr process.
 
@@ -1016,6 +1030,49 @@ Gafaelfawr also runs a Kubernetes operator that maintains some Kubernetes resour
 The Kubernetes operator uses Kopf_ to handle the machinery of processing updates and recording status in Kubernetes objects.
 
 .. _Kopf: https://kopf.readthedocs.io/en/stable/
+
+.. _gafaelfawringress:
+
+Ingresses
+---------
+
+The recommended way to create an ``Ingress`` resource for a protected resource is to use the ``GafaelfawrIngress`` custom resource definition.
+Gafaelfawr will then create an ``Ingress`` resource based on that custom resource while performing sanity checks and generating the authentication-related NGINX annotations.
+Using this custom resource also makes it easier to maintain Science Platform services, since future versions of Gafaelfawr can adjust the NGINX annotations as needed without requiring any changes to the underlying resource.
+
+A typical ``GafaelfawrIngress`` resource looks like the following:
+
+.. code-block:: yaml
+
+   apiVersion: gafaelfawr.lsst.io/v1alpha1
+   kind: GafaelfawrIngress
+   metadata:
+     name: <service>
+   config:
+     baseUrl: <base-url>
+     scopes:
+       all:
+         - <scope>
+     loginRedirect: true
+   template:
+     metadata:
+       name: <service>
+     spec:
+       rules:
+         - host: <hostname>
+           http:
+             paths:
+               - path: "/<service>"
+                 pathType: "Prefix"
+                 backend:
+                   service:
+                     name: <service>
+                     port:
+                       number: 8080
+
+The ``config`` portion contains the authentication and authorization configuration, and the ``template`` portion is copied mostly verbatim into the constructed ``Ingress`` resource.
+
+For more details, see the `Gafaelfawr documentation <https://gafaelfawr.lsst.io/>`__.
 
 .. _gafaelfawrservicetoken:
 
