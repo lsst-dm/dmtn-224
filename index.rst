@@ -860,9 +860,13 @@ The code JSON document is encrypted with Fernet_ in exactly the same way that to
 SQL database
 ------------
 
-Cloud SQL is used wherever possible, via the `Cloud SQL Auth proxy`_ running as a sidecar container in Gafaelfawr pods.
+Cloud SQL is used wherever possible, via the `Cloud SQL Auth proxy`_.
+The proxy runs as a sidecar container in the main Gafaelfawr pods so that the proxy scales with instances of the web service.
+Other Gafaelfawr pods (the Kubernetes operator, maintenance pods) use a shared instance of the proxy running as a stand-alone service that is only accessible to pods in the ``gafaelfawr`` namespace.
+
 For deployments outside of :abbr:`GCS (Google Cloud Services)`, an in-cluster PostgreSQL server deployed as part of the Science Platform is used instead.
-Authentication to the SQL server is via a password injected as a Kubernetes secret into the Gafaelfawr pods.
+
+Authentication to the SQL server, whether the proxy is used or not, is via a password injected as a Kubernetes secret into the Gafaelfawr pods.
 
 .. _Cloud SQL auth proxy: https://cloud.google.com/sql/docs/postgres/connect-admin-proxy
 
