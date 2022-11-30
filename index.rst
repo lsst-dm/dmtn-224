@@ -1,7 +1,5 @@
 :tocdepth: 1
 
-.. sectnum::
-
 Abstract
 ========
 
@@ -17,7 +15,7 @@ For a list of remaining work, see the `remaining work section of SQR-069 <https:
 
    This is part of a tech note series on identity management for the Rubin Science Platform.
    The other primary documents are :dmtn:`234`, which describes the high-level design; and :sqr:`069`, which provides a history and analysis of the decisions underlying the design and implementation.
-   See :ref:`References <references>` for a complete list of related documents.
+   See :ref:`references` for a complete list of related documents.
 
 Implementation overview
 =======================
@@ -81,15 +79,15 @@ CILogon gives the user the option SAML authentication (used by most identity fed
 The other supported deployment options are an OAuth 2.0 authentication request to GitHub or an OpenID Connect authentication request to a local identity provider.
 
 Once the user has been authenticated, their identity must be associated with additional information: full name, email address, numeric UID, primary GID, group membership, and numeric GIDs for the groups.
-In deployments using federated identity, most of this data comes from :ref:`COmanage <comanage-idm>` (via LDAP), and numeric UIDs and GIDs come from :ref:`Firestore <firestore>`.
+In deployments using federated identity, most of this data comes from :ref:`comanage-idm` (via LDAP), and numeric UIDs and GIDs come from :ref:`firestore`.
 For GitHub deployments, access to the user's profile and organization membership is requested as part of the OAuth 2.0 request, and then retrieved after authentication with the token obtained by the OAuth 2.0 authentication.
-See :ref:`GitHub <github>` for more details.
+See :ref:`github` for more details.
 With OpenID Connect, this information is either extracted from the claims of the JWT_ issued as a result of the OpenID Connect authentication flow, or is retrieved from LDAP.
 
 .. _JWT: https://datatracker.ietf.org/doc/html/rfc7519
 
 A primary GID must be provided for each user (apart from service tokens for service-to-service access).
-For federated identity and GitHub deployments, the primary GID is the user's user private group (see :ref:`User private groups <user-private-groups>`).
+For federated identity and GitHub deployments, the primary GID is the user's user private group (see :ref:`user-private-groups`).
 For deployments that use a local identity provider, the primary GID must come from either a claim in the OpenID Connect ID token or from LDAP.
 
 See :dmtn:`225` for more details on the identity information stored for each user and its sources.
@@ -119,7 +117,7 @@ CILogon will find their username by looking up their LDAP entry based on the CIL
 CILogon then adds that username as the ``username`` claim in the JWT provided to Gafaelfawr at the conclusion of the OpenID Connect authentication.
 
 If that claim is missing, the user is not registered, and Gafaelfawr then redirects them to an :ref:`onboarding flow <comanage-onboarding>`.
-Otherwise, Gafaelfawr retrieves group information from LDAP and then uses that to assign scopes to the newly-created session token (see :ref:`Browser flows <browser-flows>`).
+Otherwise, Gafaelfawr retrieves group information from LDAP and then uses that to assign scopes to the newly-created session token (see :ref:`browser-flows`).
 
 For the precise details of how COmanage is configured, see :sqr:`055`.
 
@@ -141,9 +139,12 @@ Approvers are notified via email by COmanage that a new user is awaiting approva
 Approval will be based on the institutional affiliation information collected by COmanage from the identity information released by the user's identity provider via CILogon.
 Approvers may have to reach out to the prospective user or their institution to gather additional information before deciding whether the user has data rights.
 
-Once the user is approved, the approver will add them to a group appropriate for their data rights access.
+Once the user is approved, they will typically be added automatically to a general users group.
+(The exact configuration may vary by deployment of the Science Platform.)
+The approver may want or need to add them to additional groups depending on their intended role.
+
 The user will be notified of their approval via email.
-They will then be able to return to the Science Platform deployment and log in, and CILogon will now release their username in the ``username`` claim, allowing Gafaelfawr to look up their identity information in the LDAP server populated by COmanage, assign them scopes, and allow them to continue to the Science Platform.
+They will then be able to return to the Science Platform deployment and log in, and CILogon will now release their username in the ``username`` claim, allowing Gafaelfawr to look up their identity information and group membership in the LDAP server populated by COmanage, assign them scopes, and allow them to continue to the Science Platform.
 
 COmanage user UI
 ^^^^^^^^^^^^^^^^
@@ -252,7 +253,7 @@ User private groups
 For federated identity and GitHub deployments, every user is automatically also a member (and the only member) of a group whose name matches the username and whose GID matches the user's UID.
 This is called a user private group.
 This allows Science Platform services to use the user's group membership for authorization decisions without separately tracking authorization rules by username, since access to a specific user can be done by granting access to that user's user private group (which will contain only that one member).
-The GID of this group is also the user's primary GID and should be their default group for services with POSIX file system access, such as the :ref:`Notebook Aspect <notebook-aspect>`.
+The GID of this group is also the user's primary GID and should be their default group for services with POSIX file system access, such as the :ref:`notebook-aspect`.
 
 For GitHub deployments, the user's account ID (used for their UID) is also used for the GID for their user private group.
 This risks a conflict, since the user account ID space is not distinct from the team ID space, which is used for the GIDs of all other groups.
@@ -267,9 +268,10 @@ Authentication flows
 ====================
 
 This section assumes the COmanage account for the user already exists if COmanage is in use.
-If it does not, see :ref:`COmanage onboarding <comanage-onboarding>`.
+If it does not, see :ref:`comanage-onboarding`.
 
-See the Gafaelfawr_ documentation for specific details on the ingress-nginx annotations used to protect services and the HTTP headers that are set and available to be passed down to the service after successful authentication.
+See the `Gafaelfawr documentation <https://gafaelfawr.lsst.io/>`__ for specific details on the ingress-nginx_ annotations used to protect services and the HTTP headers that are set and available to be passed down to the service after successful authentication.
+The preferred way to create the ingress annotations is to use a ``GafaelfawrIngress`` custom resource (see :ref:`gafaelfawringress`), but the annotations can also be added directly if necessary.
 
 .. _browser-flows:
 
@@ -345,7 +347,7 @@ Subsequently, whenever Gafaelfawr receives an authentication subrequest to the `
 For each group, the GID for that group is retrieved from Firestore, and a new GID is assigned if that group has not been seen before.
 That data is then returned in HTTP headers that ingress-nginx includes in the request to the Science Platform service being accessed.
 Similarly, Gafaelfawr retrieves the user's identity information and group membership from LDAP and Firestore whenever it receives a request for the user information associated with a token.
-(In practice, both the LDAP and Firestore data is usually cached.  See :ref:`Caching <caching>` for more information.)
+(In practice, both the LDAP and Firestore data is usually cached.  See :ref:`caching` for more information.)
 
 Note that, in the CILogon and COmanage case, user identity data is not stored with the token.
 Gafaelfawr retrieves it on the fly whenever it is needed (possibly via a cache).
@@ -381,7 +383,7 @@ Changes on the GitHub side are not reflected in the Science Platform until the u
 When the user logs out, the GitHub session token is used to explicitly revoke the user's OAuth App authorization at GitHub.
 This forces the user to return to the OAuth App authorization screen when logging back in, which in turn will cause GitHub to release any new or changed organization information.
 Without the explicit revocation, GitHub reuses the prior authorization with the organization and team data current at that time and doesn't provide data from new organizations.
-See :ref:`Cookie data <cookie-data>` for more information.
+See :ref:`cookie-data` for more information.
 
 OpenID Connect
 ^^^^^^^^^^^^^^
@@ -404,7 +406,7 @@ The following specific steps happen during step 6 of the :ref:`generic browser f
 If LDAP is configured, whenever Gafaelfawr receives an authentication subrequest to the ``/auth`` route, it retrieves the user's identity information and group membership from LDAP.
 That data is then returned in HTTP headers that ingress-nginx includes in the request to the Science Platform service being accessed.
 Similarly, if LDAP is configured, Gafaelfawr retrieves the user's identity information and group membership from LDAP whenever it receives a request for the user information associated with a token.
-(In practice, the LDAP data is usually cached.  See :ref:`Caching <caching>` for more information.)
+(In practice, the LDAP data is usually cached.  See :ref:`caching` for more information.)
 
 If LDAP is in use, user identity data is not stored with the token.
 Gafaelfawr retrieves it on the fly whenever it is needed (possibly via a cache).
@@ -414,14 +416,14 @@ If instead the user's identity information comes from the JWT issued by the Open
 
 Group membership obtained from the OpenID Connect token may or may not include GIDs for each group.
 Missing GIDs are not considered an error, and scopes will still be calculated correctly for groups without GIDs, but no GIDs for groups will be provided to other services.
-This may prevent using groups for access control for services that use a POSIX file system, such as the :ref:`Notebook Aspect <notebook-aspect>`.
+This may prevent using groups for access control for services that use a POSIX file system, such as the :ref:`notebook-aspect`.
 
 Logout flow
 ^^^^^^^^^^^
 
 The user may go to ``/logout`` at any time to revoke their current session.
 Their session token will be revoked, which will also revoke all child tokens, so any services still performing actions on the behalf of that user from that session will immediately have their credentials revoked.
-As discussed in :ref:`GitHub flow <github-flow>`, this will also revoke their GitHub OAuth App authorization in Science Platform deployments using GitHub for identity.
+As discussed in :ref:`github-flow`, this will also revoke their GitHub OAuth App authorization in Science Platform deployments using GitHub for identity.
 
 The ``/logout`` route takes an ``rd`` parameter specifying the URL to which to direct the user after logout.
 If it is not set, a default value configured for that Science Platform deployment (usually the top-level page) will be used instead.
@@ -436,7 +438,7 @@ To protect against open redirects, the specified redirect URL must be on the sam
 
 ``X-Forwarded-Host`` headers (expected to be set by ingress-nginx) are trusted for the purposes of determining the host portion of the request.
 ``Forwarded`` appears not to be supported by the NGINX ingress at present and therefore is not used.
-For more details on the required configuration to ensure that ``X-Forwarded-*`` headers are correctly set by ingres-nginx, see :ref:`Client IP addresses <client-ips>`.
+For more details on the required configuration to ensure that ``X-Forwarded-*`` headers are correctly set by ingres-nginx, see :ref:`client-ips`.
 
 Uauthenticated JavaScript
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -473,8 +475,12 @@ This route can be configured as a custom 403 handler in the ``Ingress`` resource
    nginx.ingress.kubernetes.io/configuration-snippet: |
      error_page 403 = "/auth/forbidden?scope=<scope>";
 
+The recommended way to do this is with the ``config.replace403`` setting in a ``GafaelfawrIngress`` custom resource.
+
 Note the parameters (here just ``scope``), which should be set to the same parameters that were passed to the Gafaelfawr ``/auth`` endopint using the ``nginx.ingress.kubernetes.io/auth-url`` annotation.
+(This is handled automatically when the ingress is generated from a ``GafaelfawrIngress`` resource.)
 This allows Gafaelfawr to construct an accurate ``WWW-Authenticate`` header.
+
 This route returns a response with a ``Cache-Control`` saying that it cannot be cached.
 
 There is unfortunately no way to pass the reason for the 403 error to this handler, so it has to blindly assume that the 403 error was due to missing a required scope.
@@ -483,28 +489,25 @@ Token flows
 -----------
 
 All token authentication flows are similar, and much simpler.
-The client puts the token in an ``Authorization`` header, either with the ``bearer`` keyword (preferred) as an `RFC 6750`_ bearer token, or as either the username or password of `RFC 7617`_ HTTP Basic Authentication.
+The client puts the token in an ``Authorization`` header, either with the ``bearer`` keyword (preferred) as an :rfc:`6750` bearer token, or as either the username or password of :rfc:`7617` HTTP Basic Authentication.
 In the latter case, whichever of the username or password that is not set to the token should be set to ``x-oauth-basic``.
-
-.. _RFC 6750: https://datatracker.ietf.org/doc/html/rfc6750
-.. _RFC 7617: https://datatracker.ietf.org/doc/html/rfc7617
 
 Gafaelfawr returns a 401 response code from the auth subrequest if no ``Authorization`` header is present, and a 403 response code if credentials are provided but not valid.
 In both cases, this is accompanied by a ``WWW-Authenticate`` challenge.
-By default, this is an `RFC 6750`_ bearer token challenge, but Gafaelfawr can be configured to return a `RFC 7617`_ HTTP Basic Authentication challenge instead (via a parameter to the ``/auth`` route, when it is configured in the ``Ingress`` as the auth subrequest handler).
+By default, this is an :rfc:`6750` bearer token challenge, but Gafaelfawr can be configured to return a :rfc:`7617` HTTP Basic Authentication challenge instead (via a parameter to the ``/auth`` route, when it is configured in the ``Ingress`` as the auth subrequest handler).
 Currently, however, that ``WWW-Authenticate`` header and the details of a 403 error are not correctly conveyed to the client due to limitations in the NGINX configuration.
 
 Gafaelfawr returns a 200 response code if the credentials are valid, which tells ingress-nginx to pass the request (possibly with additional headers) to the protected service.
 
 The behavior of redirecting the user to log in if they are not authenticated is implemented in ingress-nginx by configuring its response to a 401 error from the auth subrequest.
-For API services that are not used by browsers, ingress-nginx should not be configured with the ``nginx.ingress.kubernetes.io/auth-signin`` annotation.
+For API services that are not used by browsers, ingress-nginx should not be configured with the ``nginx.ingress.kubernetes.io/auth-signin`` annotation (the ``config.loginRedirect`` setting of a ``GafaelfawrIngress``).
 In this case, it will return the 401 challenge to the client instead of redirecting.
 
 When authenticating a request with a token, Gafaelfawr does not care what type of token is presented.
 It may be a user, notebook, internal, or service token; all of them are handled the same way.
 
 Service tokens, used for service-to-service API calls unrelated to a specific user request, are managed as Kubernetes secrets via a Kubernetes custom resource.
-For more details, see :ref:`GafaelfawrServiceToken <gafaelfawrservicetoken>`.
+For more details, see :ref:`gafaelfawrservicetoken`.
 
 .. _token-reuse:
 
@@ -532,7 +535,7 @@ To reuse an internal token, it must meet the same criteria, plus:
 If a notebook or internal token already exists that meet these criteria, that token is returned as the token to delegate to the service, rather than creating a new token.
 
 Notebook and internal tokens are also cached to avoid the SQL and Redis queries required to find a token that can be reused.
-See :ref:`Caching <caching>` for more information.
+See :ref:`caching` for more information.
 
 Network policy
 --------------
@@ -604,7 +607,7 @@ Here is the flow using Gafaelfawr's OpenID Connect provider.
    :name: Gafaelfawr OpenID Connect flow
 
    Sequence diagram of the authentication flow using the Gafaelfawr OpenID Connect provider.
-   This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (see :ref:`Browser flows <browser-flows>`).
+   This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (see :ref:`browser-flows`).
 
 In detail:
 
@@ -671,6 +674,7 @@ In the current Science Platform implementation, that session database is stored 
 The data stored in the authentication session is additionally encrypted with a key known only to JupyterHub.
 
 The ingress for JupyterHub is configured to require Gafaelfawr authentication and access control for all JupyterHub and lab URLs.
+(This is done by adding the necessary annotations as part of the JupyterHub configuration, rather than via a ``GafaelfawrIngress`` custom resource, since the JupyterHub ingress is managed by its own Helm chart.)
 Therefore, regardless of what JupyterHub and the lab think is the state of the user's authentication, the request is not allowed to reach them unless the user is already authenticated, and any redirects to the upstream identity provider are handled before JupyterHub ever receives a request.
 The user is also automatically redirected to the upstream identity provider to reauthenticate if their credentials expire while using JupyterHub.
 The ingress configuration requests a delegated notebook token.
@@ -686,7 +690,7 @@ Information from the authentication session state is used when spawning a user l
    :name: JupyterHub and lab authentication flow
 
    Sequence diagram of the authentication flow between Gafaelfawr, JupyterHub, and the lab.
-   This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (see :ref:`Browser flows <browser-flows>`).
+   This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (see :ref:`browser-flows`).
 
 The lab itself is spawned using the UID and primary GID of the user, so that any accesses to mounted POSIX file systems are accessed as the identity of the user.
 The GIDs of the user's other groups are added as supplemental groups for the lab process.
@@ -720,6 +724,9 @@ Portal Aspect
 Similar to the Notebook Aspect, the Portal Aspect needs to make API calls on behalf of the user (most notably to the TAP and image API services).
 Unlike the Notebook Aspect, the Portal Aspect uses a regular internal token with appropriate scopes for this.
 
+The Portal Aspect uses ``GafaelfawrIngress`` custom resources to define its ingresses.
+There are two separate ingresses, since the admin API requires different scopes than the user-facing service.
+
 In the Science-Platform-specific modifications to Firefly, the software used to create the Portal Aspect, that internal token is extracted from the ``X-Auth-Request-Token`` header and sent when appropriate in requests to other services.
 Since the Portal Aspect supports using other public TAP and image services in addition to the ones local to the Science Platform deployment in which it's running, it has to know when to send this token in an ``Authorization`` header and when to omit it.
 (We don't want to send the user's token to third-party services, since that's a breach of the user's credentials.)
@@ -734,7 +741,7 @@ Storage
 =======
 
 This section deals only with storage for Gafaelfawr in each Science Platform deployment.
-For the storage of identity management information for each registered user when federated identity is in use, see :ref:`COmanage <comanage-idm>`.
+For the storage of identity management information for each registered user when federated identity is in use, see :ref:`comanage-idm`.
 
 Gafaelfawr storage is divided into two, sometimes three, backend stores: a SQL database, Redis, and optionally Firestore.
 Redis is used for the token itself, including the authentication secret.
@@ -768,7 +775,7 @@ Redis is canonical for whether a token exists and is valid.
 If a token is not found in Redis, it cannot be used to authenticate, even if it still exists in the SQL database.
 The secret portion of a token is stored only in Redis.
 
-Redis stores a key for each token except for the bootstrap token (see :ref:`Bootstrapping <bootstrapping>`).
+Redis stores a key for each token except for the bootstrap token (see :ref:`bootstrapping`).
 The Redis key is ``token:<key>`` where ``<key>`` is the key portion of the token, corresponding to the primary key of the ``token`` table.
 The value is an encrypted JSON document with the following keys:
 
@@ -891,9 +898,9 @@ The cookie is an encrypted JSON document with the following keys, not all of whi
 
 * **token**: User's session token if they are currently authenticated.
 * **csrf**: CSRF token, required for some state-changing operations when authenticated via session token presented in a browser cookie.
-  See :ref:`CSRF protection <csrf>` for more details.
+  See :ref:`csrf` for more details.
 * **github**: OAuth 2.0 token for the user obtained via GitHub authentication.
-  Used to revoke the user's OAuth App grant on logout as discussed in :ref:`GitHub browser flow <github-flow>`.
+  Used to revoke the user's OAuth App grant on logout as discussed in :ref:`github-flow`.
 * **return_url**: URL to which to return once the login process is complete.
   Only set while a login is in progress.
 * **state**: Random state for the login process, used to protect against session fixation.
@@ -972,12 +979,14 @@ Gafaelfawr also caches notebook and internal tokens for a specific token to avoi
 
 Gafaelfawr uses the following caches:
 
-* Caches of mappings from parent token parameters to reusable child notebook tokens and internal tokens.
+- Caches of mappings from parent token parameters to reusable child notebook tokens and internal tokens.
   The cache is designed to only return a token if it satisfies the criteria for :ref:`reuse of a notebook or internal token <token-reuse>`.
   Each of these caches holds up to 5,000 entries.
-* Three caches of LDAP data if LDAP is enabled: group membership of a user (including GIDs), group membership of a user (only group names, used for scopes), and user identity information (name, email, and UID, whichever is configured to come from LDAP).
+
+- Three caches of LDAP data if LDAP is enabled: group membership of a user (including GIDs), group membership of a user (only group names, used for scopes), and user identity information (name, email, and UID, whichever is configured to come from LDAP).
   Each of these caches holds up to 1,000 entries, and entries are cached for at most five minutes.
-* Caches of mappings of users to UIDs and group names to GIDs, if Firestore is enabled.
+
+- Caches of mappings of users to UIDs and group names to GIDs, if Firestore is enabled.
   Each of these caches holds up to 10,000 entries.
   Since UIDs and GIDs are expected to never change once assigned, the cache entries never expire for the lifetime of the Gafaelfawr process.
 
@@ -1021,6 +1030,49 @@ Gafaelfawr also runs a Kubernetes operator that maintains some Kubernetes resour
 The Kubernetes operator uses Kopf_ to handle the machinery of processing updates and recording status in Kubernetes objects.
 
 .. _Kopf: https://kopf.readthedocs.io/en/stable/
+
+.. _gafaelfawringress:
+
+Ingresses
+---------
+
+The recommended way to create an ``Ingress`` resource for a protected resource is to use the ``GafaelfawrIngress`` custom resource definition.
+Gafaelfawr will then create an ``Ingress`` resource based on that custom resource while performing sanity checks and generating the authentication-related NGINX annotations.
+Using this custom resource also makes it easier to maintain Science Platform services, since future versions of Gafaelfawr can adjust the NGINX annotations as needed without requiring any changes to the underlying resource.
+
+A typical ``GafaelfawrIngress`` resource looks like the following:
+
+.. code-block:: yaml
+
+   apiVersion: gafaelfawr.lsst.io/v1alpha1
+   kind: GafaelfawrIngress
+   metadata:
+     name: <service>
+   config:
+     baseUrl: <base-url>
+     scopes:
+       all:
+         - <scope>
+     loginRedirect: true
+   template:
+     metadata:
+       name: <service>
+     spec:
+       rules:
+         - host: <hostname>
+           http:
+             paths:
+               - path: "/<service>"
+                 pathType: "Prefix"
+                 backend:
+                   service:
+                     name: <service>
+                     port:
+                       number: 8080
+
+The ``config`` portion contains the authentication and authorization configuration, and the ``template`` portion is copied mostly verbatim into the constructed ``Ingress`` resource.
+
+For more details, see the `Gafaelfawr documentation <https://gafaelfawr.lsst.io/>`__.
 
 .. _gafaelfawrservicetoken:
 
@@ -1129,9 +1181,7 @@ This will return the next batch of results without a danger of missing any.
 The cursor may also begin with the letter ``p`` for links to the previous page.
 In this case, the relations in the SQL query are reversed (newer than or equal to the timestamp, unique IDs greater than or equal to the one in the cursor).
 
-The pagination links use the ``Link`` (see `RFC 8288`_) header to move around in the results, and an ``X-Total-Count`` custom header with the total number of results.
-
-.. _RFC 8288: https://tools.ietf.org/html/rfc8288
+The pagination links use the ``Link`` (see :rfc:`8288`) header to move around in the results, and an ``X-Total-Count`` custom header with the total number of results.
 
 Example headers for a paginated result::
 
@@ -1149,7 +1199,7 @@ From that UI, a user of the Science Platform can see their existing tokens, crea
 
 This UI is implemented in client-side JavaScript (using React_) and performs all of its operations via the token API.
 This ensures that there is one implementation of any token operation, used by both the API and the UI.
-The API provides a login route to the UI that provides the CSRF token (see :ref:`CSRF protection <csrf>`) and configuration information required to construct the UI.
+The API provides a login route to the UI that provides the CSRF token (see :ref:`csrf`) and configuration information required to construct the UI.
 
 .. _React: https://reactjs.org/
 
