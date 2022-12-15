@@ -311,8 +311,12 @@ The details of steps 5 and 6 vary depending on the authentication provider, as d
    It then checks the scope information of that token against the requested authentication scope given as a ``scope`` parameter to the ``/auth`` route.
    If the requested scope or scopes are not satisfied, it returns a 403 error.
    If LDAP is configured, user metadata such as group memberships and email address are retrieved from LDAP.
-   That metadata, either from the data stored with the token or from LDAP, is added to additional response headers.
-   Gafaelfawr then returns 200 with those response headers, and NGINX then proxies the request to the protected application and user interaction continues as normal, possibly including some of the response headers in the proxied request.
+#. The metadata, either from the data stored with the token or from LDAP, is added to additional response headers.
+   Gafaelfawr also copies the ``Authorization`` and ``Cookie`` headers from the incoming request to the reply with any Gafaelfawr tokens or cookies removed.
+   Gafaelfawr then returns 200 with those response headers, and NGINX then proxies the request to the protected application and user interaction continues as normal.
+   The response headers from Gafaelfawr — ``Authorization``, ``Cookie``, and the additional metadata headers — are added to the request sent to the protected application, replacing the headers in the original request.
+   The filtering of the ``Authorization`` and ``Cookie`` headers is to prevent credential leakage to services.
+   See :sqr:`051` for more details.
 
 Of special security note is the ``state`` parameter validation.
 During initial authentication, Gafaelfawr sends a ``state`` parameter to the OAuth 2.0 or OpenID Connect authentication provider and also stores that parameter in the session cookie.
@@ -495,7 +499,7 @@ In the latter case, whichever of the username or password that is not set to the
 Gafaelfawr returns a 401 response code from the auth subrequest if no ``Authorization`` header is present, and a 403 response code if credentials are provided but not valid.
 In both cases, this is accompanied by a ``WWW-Authenticate`` challenge.
 By default, this is an :rfc:`6750` bearer token challenge, but Gafaelfawr can be configured to return a :rfc:`7617` HTTP Basic Authentication challenge instead (via a parameter to the ``/auth`` route, when it is configured in the ``Ingress`` as the auth subrequest handler).
-Currently, however, that ``WWW-Authenticate`` header and the details of a 403 error are not correctly conveyed to the client due to limitations in the NGINX configuration.
+Currently, however, the ``WWW-Authenticate`` header of a 403 error is not correctly conveyed to the client due to limitations in the NGINX configuration.
 
 Gafaelfawr returns a 200 response code if the credentials are valid, which tells ingress-nginx to pass the request (possibly with additional headers) to the protected service.
 
@@ -778,6 +782,8 @@ The secret portion of a token is stored only in Redis.
 Redis stores a key for each token except for the bootstrap token (see :ref:`bootstrapping`).
 The Redis key is ``token:<key>`` where ``<key>`` is the key portion of the token, corresponding to the primary key of the ``token`` table.
 The value is an encrypted JSON document with the following keys:
+
+.. rst-class:: compact
 
 - **secret**: The corresponding secret for this token
 - **username**: The user whose authentication is represented by this token
@@ -1077,6 +1083,11 @@ A typical ``GafaelfawrIngress`` resource looks like the following:
 The ``config`` portion contains the authentication and authorization configuration, and the ``template`` portion is copied mostly verbatim into the constructed ``Ingress`` resource.
 
 For more details, see the `Gafaelfawr documentation <https://gafaelfawr.lsst.io/>`__.
+
+``GafaelfawrIngress`` can, and should, also be used to create ingresses for services that don't require authentication.
+In this anonymous case, Gafaelfawr is invoked only to filter cookies and tokens out of the headers before the rqeuest is passed to the underlying service.
+This prevents leaking security credentials to a service, where they could be stolen in the event of a service compromise.
+For more details, see :sqr:`051`.
 
 .. _gafaelfawrservicetoken:
 
