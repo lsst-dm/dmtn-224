@@ -1342,6 +1342,10 @@ Design
     Proposed design for supporting user impersonation by administrators.
     If implemented, the details as implemented will be incorporated into this document and :dmtn:`234`.
 
+:sqr:`073`
+    Proposed design for user quotas and API rate limiting.
+    If implemented, the details as implemented will be incorporated into this document and :dmtn:`234`.
+
 Security
 --------
 
