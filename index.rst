@@ -133,6 +133,11 @@ They will be required to confirm that they can receive email at the email addres
 The choice of username is subject to constraints specified in :dmtn:`225`.
 The user's COmanage account will then be created in a pending state, and must be approved by an authorized approver before it becomes active and is provisioned in LDAP (and thus allows access to the Science Platform).
 
+We would prefer to treat names as opaque strings, without making any cultural assumptions about the number of components or order of components.
+Unfortunately, COmanage doesn't support this configuration and requires representing a name in components.
+The compromise we reached with this is to allow the given, middle, family, and suffix name components, but only require the given name be set.
+COmanage will then assemble those components into a display name (probably by using western name order), and all other Science Platform components will use only that complete display name if they use a name at all.
+
 The web pages shown during this onboarding flow are controlled by the style information in the `lsst-registry-landing <https://github.com/cilogon/lsst-registry-landing>`__ project on GitHub.
 
 Approvers are notified via email by COmanage that a new user is awaiting approval.
