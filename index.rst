@@ -499,7 +499,8 @@ Token flows
 
 All token authentication flows are similar, and much simpler.
 The client puts the token in an ``Authorization`` header, either with the ``bearer`` keyword (preferred) as an :rfc:`6750` bearer token, or as either the username or password of :rfc:`7617` HTTP Basic Authentication.
-In the latter case, whichever of the username or password that is not set to the token should be set to ``x-oauth-basic``.
+Whichever Basic Authentication field is not a token is ignored.
+If both the usenrame and password fields of a Basic Authentication header are tokens, they must be identical.
 
 Gafaelfawr returns a 401 response code from the auth subrequest if no ``Authorization`` header is present, and a 403 response code if credentials are provided but not valid.
 In both cases, this is accompanied by a ``WWW-Authenticate`` challenge.
