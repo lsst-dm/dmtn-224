@@ -135,7 +135,8 @@ The user's COmanage account will then be created in a pending state, and must be
 
 We would prefer to treat names as opaque strings, without making any cultural assumptions about the number of components or order of components.
 Unfortunately, COmanage doesn't support this configuration and requires representing a name in components.
-The compromise we reached with this is to allow the given, middle, family, and suffix name components, but only require the given name be set.
+The compromise we reached with this is to allow only given and family name components and only require the given name be set.
+Users can add middle name in the given name field, suffixes in the family name field, and so forth if they wish.
 COmanage will then assemble those components into a display name (probably by using western name order), and all other Science Platform components will use only that complete display name if they use a name at all.
 
 The web pages shown during this onboarding flow are controlled by the style information in the `lsst-registry-landing <https://github.com/cilogon/lsst-registry-landing>`__ project on GitHub.
