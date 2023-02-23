@@ -1331,7 +1331,7 @@ Design
     Proposed design for access control to Butler, the system that manages read and write access to Rubin Observatory data.
 
 :dmtn:`182`
-    Supplements `dmtn:`169` with a design for how Butler should make access control decisions for a given operation.
+    Supplements :dmtn:`169` with a design for how Butler should make access control decisions for a given operation.
     Proposes that all access control decisions should be based on the user's group membership as exposed by the identity management system.
 
 :dmtn:`225`
