@@ -608,7 +608,8 @@ OpenID Connect flow
 -------------------
 
 Some services deployed on the Science Platform (such as Chronograf_) want to do their own authentication using an upstream OpenID Connect provider and don't have a mechanism to rely on authentication performed by ingress-nginx.
-To support those applications, Gafaelfawr can also service as a simple OpenID Connect provider for other services in the same Science Platform.
+Specific Science Platform installations may also be used as an authentication and authorization service for :abbr:`IDACs (International Data Access Centers)` (see :dmtn:`253`).
+To support those use cases, Gafaelfawr can also serve as a simple OpenID Connect provider.
 
 .. _Chronograf: https://www.influxdata.com/time-series-platform/chronograf/
 
@@ -1340,6 +1341,9 @@ Design
 :dmtn:`234`
     High-level design for the Rubin Science Platform identity management system.
     This is the document to read first to understand the overall system.
+
+:dmtn:`253`
+    High-level design for how to authenticate users for :abbr:`IDACs (International Data Acces Centers)` and provide information about their data access rights.
 
 :sqr:`044`
     Requirements for the identity management system.
