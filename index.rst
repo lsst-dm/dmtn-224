@@ -1,10 +1,11 @@
-:tocdepth: 1
+###############################################
+RSP identity management implementation strategy
+###############################################
 
-Abstract
-========
+.. abstract::
 
-The identity management, authentication, and authorization component of the Rubin Science Platform is responsible for maintaining a list of authorized users and their associated identity information, authenticating their access to the Science Platform, and determining which services they are permitted to use.
-This tech note describes the technical details of the implementation of that system.
+   The identity management, authentication, and authorization component of the Rubin Science Platform is responsible for maintaining a list of authorized users and their associated identity information, authenticating their access to the Science Platform, and determining which services they are permitted to use.
+   This tech note describes the technical details of the implementation of that system.
 
 This is a description of the implementation as it stood at the time of last modification of this tech note.
 The identity management system is not complete.
@@ -35,11 +36,9 @@ The first two components are external to the Kubernetes cluster in which the Sci
 
 Here is that architecture in diagram form:
 
-.. figure:: /_static/science-platform.png
-   :name: High-level Science Platform architecture
+.. diagrams:: science-platform.py
 
-   An overview of a Rubin Science Platform deployment.
-   This shows the major aspects of the Science Platform but omits considerable detail, including most supporting services, the identity management store, and some details of the Gafaelfawr architecture.
+This shows the major aspects of the Science Platform but omits considerable detail, including most supporting services, the identity management store, and some details of the Gafaelfawr architecture.
 
 As discussed in :dmtn:`234`, there is no single Rubin Science Platform.
 There are multiple deployments of the Science Platform at different sites with different users and different configurations.
@@ -51,11 +50,9 @@ Here is the architecture for those deployments, expanding the identity managemen
 .. _CILogon: https://www.cilogon.org/
 .. _COmanage: https://www.incommon.org/software/comanage/
 
-.. figure:: /_static/federated.png
-   :name: Federated identity management architecture
+.. diagrams:: federated.py
 
-   Detail of the components for identity management for a deployment of the Science Platform that uses federated identity.
-   The Science Platform aspects and services are represented here by a single service to make the diagram simpler.
+The Science Platform aspects and services are represented here by a single service to make the diagram simpler.
 
 The other two supported options are to use GitHub for both authenitcation and identity mangaement, or to use a local `OpenID Connect`_ authentication provider as the source of user authentication.
 In the latter case, user identity information can come either from the OpenID Connect authentication provider or from a local LDAP server.
@@ -181,7 +178,9 @@ The group tree holds entries for every group (Rubin-managed or user-managed).
 
 During login, and when a Science Platform application requests user identity data, Gafaelfawr retrieves user identity information by looking up the user in the person tree, and retrieves the user's group membership by searching for all groups that have that user as a member.
 
-A typical person tree entry looks like::
+A typical person tree entry looks like:
+
+.. code-block:: ldif
 
     dn: voPersonID=LSST100006,ou=people,o=LSST,o=CO,dc=lsst,dc=org
     sn: Allbery
@@ -209,7 +208,9 @@ The ``uid`` multivalued attribute holds the unique CILogon identifiers.
 ``voPersonID`` is an internal unique identifier for that user that's used only by COmanage.
 The user's preferred full name is in ``displayName`` and their preferred email address is in ``mail``.
 
-A typical group tree entry looks like::
+A typical group tree entry looks like:
+
+.. code-block:: ldif
 
     dn: cn=g_science-platform-idf-dev,ou=groups,o=LSST,o=CO,dc=lsst,dc=org
     cn: g_science-platform-idf-dev
@@ -291,6 +292,13 @@ If the user visits a Science Platform page intended for a web browser (as oppose
 Generic authentication flow
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Here is a diagram of the generic login flow.
+
+.. mermaid:: flow-login.mmd
+   :caption: Generic browser authentication flow
+
+This diagram omits the possible request from Gafaelfawr to an LDAP server for additional user metadata to avoid making it even smaller than it already is.
+
 Here are the generic steps of a browser authentication flow.
 The details of steps 5 and 6 vary depending on the authentication provider, as discussed in greater depth below.
 
@@ -335,10 +343,13 @@ CILogon
 
 Here is the CILogon authorization flow in detail.
 
-.. figure:: /_static/flow-login-cilogon.svg
-   :name: CILogon browser authentication flow
+.. mermaid:: flow-login-cilogin.mmd
+   :caption: CILogon browser authentication flow
 
-The following specific steps happen during step 5 of the :ref:`generic browser flow <generic-browser-flow>`.
+This diagram omits the ingress, the initial unauthenticated redirect to ``/login``, and the service to which the user is sent once the login process is complete.
+All of those steps happen identically to the :ref:`generic browser flow <generic-browser-flow>`.
+
+The following specific steps happen during step 5 of the generic browser flow.
 
 #. CILogon prompts the user for which identity provider to use, unless the user has previously chosen an identity provider and told CILogon to remember that selection.
 #. CILogon redirects the user to that identity provider.
@@ -370,12 +381,13 @@ GitHub
 
 Here is the GitHub authentication flow in detail.
 
-.. figure:: /_static/flow-login-github.svg
-   :name: GitHub browser authentication flow
+.. mermaid:: flow-login-github.mmd
+   :caption: GitHub browser authentication flow
 
-   Sequence diagram of the browser authentication flow with GitHub.
+This diagram omits the ingress, the initial unauthenticated redirect to ``/login``, and the service to which the user is sent once the login process is complete.
+All of those steps happen identically to the :ref:`generic browser flow <generic-browser-flow>`.
 
-The following specific steps happen during step 5 of the :ref:`generic browser flow <generic-browser-flow>`.
+The following specific steps happen during step 5 of the generic browser flow.
 
 #. GitHub prompts the user for their authentication credentials if they're not already authenticated.
 #. If the user has not previously authorized the OAuth App for this Science Platform deployment, the user is prompted to confirm to GitHub that it's okay to release their identity information and organization membership to Gafaelfawr.
@@ -400,12 +412,14 @@ OpenID Connect
 
 Here is the OpenID Connect authentication flow in detail.
 
-.. figure:: /_static/flow-login-oidc.svg
-   :name: OpenID Connect browser authentication flow
+.. mermaid:: flow-login-oidc.mmd
+   :caption: GitHub browser authentication flow
 
-   Sequence diagram of the browser authentication flow for a generic OpenID Connect provider, assuming identity data is stored in LDAP.
+This diagram omits the ingress, the initial unauthenticated redirect to ``/login``, and the service to which the user is sent once the login process is complete.
+All of those steps happen identically to the :ref:`generic browser flow <generic-browser-flow>`.
+This diagram assumes identity data is stored in LDAP.
 
-The following specific steps happen during step 6 of the :ref:`generic browser flow <generic-browser-flow>`.
+The following specific steps happen during step 6 of the generic browser flow.
 
 #. Gafaelfawr retrieves the OpenID Connect configuration information for the OpenID Connect provider and checks the signature on the JWT identity token.
 #. Gafaelfawr extracts the user's username from a claim of the identity token.
@@ -470,30 +484,13 @@ When the user reloads the page, the browser will send a regular request without 
 
 Checking for this header does not catch all requests that are pointless to redirect (image and CSS requests, for instance), and not all AJAX requests will send the header, but in practice it seems to catch the worst cases.
 
-Cached authorization errors
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Authorization errors
+^^^^^^^^^^^^^^^^^^^^
 
-Depite the HTTP specification saying that 403 responses should not be cached, browsers and proxies sometimes decide to cache them anyway.
-This creates confusing behavior if a user did not have access to a service, obtains it, logs out and back in again to get their new token scopes, and then tries to visit the service again, only to have the cached 403 response shown again by their browser.
-Unfortunately, NGINX does not pass the headers of a 403 failure from an auth request subhandler to the client, so this cannot be fixed in the obvious way by a ``Cache-Control`` header.
+In order to provide correct behavior for incorrect authentication, Gafaelfawr takes over 403 error responses from any service using a Gafaelfawr-protected ingress.
+Unfortunately, due to limitations in NGINX, this means that the body and ``WWW-Authenticate`` headers of any 403 errors returned directly by the underlying service will be lost, although the 403 status code itself will still be passed on.
 
-As a workaround, Gafaelfawr provides a route that serves a 403 response to all requests with an ``WWW-Authenticate`` for a token with insufficient scope.
-This route can be configured as a custom 403 handler in the ``Ingress`` resource for a service using the following annotation:
-
-.. code-block:: yaml
-
-   nginx.ingress.kubernetes.io/configuration-snippet: |
-     error_page 403 = "/auth/forbidden?scope=<scope>";
-
-The recommended way to do this is with the ``config.replace403`` setting in a ``GafaelfawrIngress`` custom resource.
-
-Note the parameters (here just ``scope``), which should be set to the same parameters that were passed to the Gafaelfawr ``/auth`` endopint using the ``nginx.ingress.kubernetes.io/auth-url`` annotation.
-(This is handled automatically when the ingress is generated from a ``GafaelfawrIngress`` resource.)
-This allows Gafaelfawr to construct an accurate ``WWW-Authenticate`` header.
-
-This route returns a response with a ``Cache-Control`` saying that it cannot be cached.
-
-There is unfortunately no way to pass the reason for the 403 error to this handler, so it has to blindly assume that the 403 error was due to missing a required scope.
+Applications protected by Gafaelfawr should therefore avoid using 403 errors in favor of other status codes.
 
 Token flows
 -----------
@@ -615,11 +612,11 @@ To support those use cases, Gafaelfawr can also serve as a simple OpenID Connect
 
 Here is the flow using Gafaelfawr's OpenID Connect provider.
 
-.. figure:: /_static/flow-oidc.svg
-   :name: Gafaelfawr OpenID Connect flow
+.. mermaid:: flow-oidc.mmd
+   :caption: Gafaelfawr OpenID Connect flow
 
-   Sequence diagram of the authentication flow using the Gafaelfawr OpenID Connect provider.
-   This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (see :ref:`browser-flows`).
+This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (see :ref:`browser-flows`).
+It also omits the ingress layer and any calls from Gafaelfawr to LDAP to get the user's metadata.
 
 In detail:
 
@@ -698,11 +695,11 @@ That custom route reads the headers from the incoming request, which are set by 
 That identity information along with the token are then stored as the JupyterHub authentication session state.
 Information from the authentication session state is used when spawning a user lab to control the user's UID, GID, groups, and other information required by the lab, and the notebook token is injected into the lab so that it will be available to the user.
 
-.. figure:: /_static/flow-jupyter.svg
-   :name: JupyterHub and lab authentication flow
+.. mermaid:: flow-jupyter.mmd
+   :caption: JupyterHub and lab authentication flow
 
-   Sequence diagram of the authentication flow between Gafaelfawr, JupyterHub, and the lab.
-   This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (see :ref:`browser-flows`).
+This diagram assumes the user is already authenticated to Gafaelfawr and therefore omits the flow to the external identity provider (see :ref:`browser-flows`).
+It also omits the ingress and auth subrequests to Gafaelfawr and the JupyterHub proxy server to try to keep the diagram from being too small to read.
 
 The lab itself is spawned using the UID and primary GID of the user, so that any accesses to mounted POSIX file systems are accessed as the identity of the user.
 The GIDs of the user's other groups are added as supplemental groups for the lab process.
@@ -1344,6 +1341,7 @@ Design
 
 :dmtn:`253`
     High-level design for how to authenticate users for :abbr:`IDACs (International Data Acces Centers)` and provide information about their data access rights.
+    IDAC authentication creates the most requirements for Gafaelfawr OpenID Connect support, so this tech note also contains more discussion and design considerations for the OpenID Connect authentication flow.
 
 :sqr:`044`
     Requirements for the identity management system.

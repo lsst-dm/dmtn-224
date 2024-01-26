@@ -12,8 +12,6 @@ from diagrams.onprem.client import User
 from diagrams.onprem.compute import Server
 from diagrams.programming.framework import React
 
-os.chdir(os.path.dirname(__file__))
-
 graph_attr = {
     "label": "",
     "nodesep": "0.2",

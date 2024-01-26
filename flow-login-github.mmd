@@ -1,0 +1,17 @@
+sequenceDiagram
+  browser->>+Gafaelfawr: /login
+  Gafaelfawr-->>-browser: redirect to GitHub
+
+  browser->>+GitHub: authenticate
+  GitHub-->>-browser: redirect to /login
+
+  browser->>+Gafaelfawr: /login
+  Gafaelfawr->>+GitHub: get access token
+  GitHub-->>-Gafaelfawr: access token
+  Gafaelfawr->>+GitHub: get user info
+  GitHub-->>-Gafaelfawr: user info
+  Gafaelfawr->>+GitHub: get user email
+  GitHub-->>-Gafaelfawr: email info
+  Gafaelfawr->>+GitHub: get user teams
+  GitHub-->>-Gafaelfawr: teams info
+  Gafaelfawr-->>-browser: redirect to service

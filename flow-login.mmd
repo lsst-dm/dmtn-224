@@ -1,0 +1,27 @@
+sequenceDiagram
+  browser->>+ingress: service URL
+  ingress->>+Gafaelfawr: auth subrequest
+  Gafaelfawr-->>-ingress: 401
+  ingress-->>-browser: redirect to /login
+
+  browser->>+ingress: /login
+  ingress->>+Gafaelfawr: /login
+  Gafaelfawr-->>-ingress: redirect to provider
+  ingress-->>-browser: redirect to provider
+
+  browser->>+provider: authenticate
+  provider-->>-browser: redirect to /login
+
+  browser->>+ingress: /login
+  ingress->>+Gafaelfawr: /login
+  Gafaelfawr->>+provider: get token
+  provider-->>-Gafaelfawr: token
+  Gafaelfawr-->>-ingress: redirect to service
+  ingress-->>-browser: redirect to service
+
+  browser->>+ingress: service URL
+  ingress->>+Gafaelfawr: auth subrequest
+  Gafaelfawr-->>-ingress: 200
+  ingress->>+service: service URL
+  service-->>-ingress: response
+  ingress-->>-browser: response

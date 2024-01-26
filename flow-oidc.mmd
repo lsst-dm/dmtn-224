@@ -1,0 +1,16 @@
+sequenceDiagram
+  browser->>+service: /service
+  service-->>-browser: redirect to /auth/openid/login
+
+  browser->>+Gafaelfawr: /auth/openid/login
+  Gafaelfawr-->>-browser: redirect to /service/login
+
+  browser->>+service: /service/login
+  service->>+Gafaelfawr: /auth/openid/token
+  Gafaelfawr-->>-service: JWT
+  service->>+Gafaelfawr: /auth/openid/userinfo
+  Gafaelfawr-->>-service: user metadata
+  service-->>-browser: redirect to /service
+
+  browser->>+service: /service
+  service-->>-browser: page contents

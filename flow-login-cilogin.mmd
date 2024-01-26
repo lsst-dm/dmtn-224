@@ -1,0 +1,22 @@
+sequenceDiagram
+  browser->>+Gafaelfawr: /login
+  Gafaelfawr-->>-browser: redirect to CILogon
+
+  browser->>+CILogon: auth request
+  CILogon-->>-browser: redirect to provider
+
+  browser->>+provider: authenticate
+  provider-->>-browser: redirect to CILogon
+  browser->>+CILogon: w/authorization code
+  CILogon->>+provider: get ID token
+  provider-->>-CILogon: JWT
+  CILogon-->>-browser: redirect to /login
+
+  browser->>+Gafaelfawr: /login
+  Gafaelfawr->>+CILogon: get ID token
+  CILogon-->>-Gafaelfawr: JWT
+  Gafaelfawr->>+CILogon: get OIDC config
+  CILogon-->>-Gafaelfawr: config
+  Gafaelfawr->>+LDAP: get user data
+  LDAP-->>-Gafaelfawr: user data
+  Gafaelfawr-->>-browser: redirect to service
