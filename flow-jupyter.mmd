@@ -1,0 +1,23 @@
+sequenceDiagram
+  participant browser
+  participant Gafaelfawr
+  participant JupyterHub
+  browser->>+JupyterHub: request spawn page
+  JupyterHub-->>-browser: redirect to /nb/gafaelfawr/login
+
+  browser->>+JupyterHub: /nb/gafaelfawr/login
+  JupyterHub->>+Gafaelfawr: /auth/api/v1/user-info
+  Gafaelfawr-->>-JupyterHub: user metadata
+  JupyterHub-->>-browser: spawn page
+
+  browser->>+JupyterHub: spawn request
+  create participant lab
+  JupyterHub->>lab: create lab
+  JupyterHub->>+lab: wait for startup
+  lab-->>-JupyterHub: finish startup
+  JupyterHub-->>-browser: redirect to lab
+
+  browser->>+lab: request UI
+  lab->>+JupyterHub: OAuth authentication
+  JupyterHub-->>-lab: OAuth information
+  lab-->>-browser: lab UI

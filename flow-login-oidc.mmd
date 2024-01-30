@@ -1,0 +1,15 @@
+sequenceDiagram
+  browser->>+Gafaelfawr: /login
+  Gafaelfawr-->>-browser: redirect to OIDC
+
+  browser->>+OIDC: authenticate
+  OIDC-->>-browser: redirect to /login
+
+  browser->>+Gafaelfawr: /login
+  Gafaelfawr->>+OIDC: get ID token
+  OIDC-->>-Gafaelfawr: JWT
+  Gafaelfawr->>+OIDC: get OIDC config
+  OIDC-->>-Gafaelfawr: config
+  Gafaelfawr->>+LDAP: get user data
+  LDAP-->>-Gafaelfawr: user data
+  Gafaelfawr-->>-browser: redirect to service
