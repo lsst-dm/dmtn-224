@@ -754,6 +754,19 @@ The Portal Aspect wants several scopes for its delegated token so that it can pe
 It therefore takes advantage of Gafaelfawr's support for requesting delegated scopes that may or may not be available.
 If the user's authenticating token has the scopes it prefers, it gets an internal token with those scopes; otherwise, it gets an internal token with whatever subset of the scopes the user has, but the authentication still succeeds as long as the user has ``exec:portal`` access (the scope used to control all access to the Portal Aspect).
 
+CADC services
+-------------
+
+IVOA services maintained by the Canadian Astronomy Data Center (CADC) use a standard authentication system that presents a token to a user information endpoint and expects a JSON object of OpenID Connect claims in response.
+The username of the authenticated user is retrieved from the ``preferred_username`` key.
+
+This poses two challenges: this format does not match the normal format of the Gafaelfawr userinfo endpoint, which uses a ``username`` key rather than the OpenID Connect ``preferred_username`` claim name; and the current implementation of that shared authentication code requires that the ``sub`` key hold a UUID.
+
+Currently, Gafaelfawr provides a separate endpoint specifically for CADC software (``/auth/cadc/userinfo``) that returns user metadata in the expected format.
+The ``sub`` value returned by that endpoint is set to a v5 UUID derived from a namespace (which is a random v4 UUID per Science Platform deployment) and the numeric UID of the user.
+
+Hopefully in the future the CADC requirement for a UUID will be relaxed and some of the pecularities of this implementation can be retired.
+
 Storage
 =======
 
