@@ -605,7 +605,7 @@ OpenID Connect flow
 -------------------
 
 Some services deployed on the Science Platform (such as Chronograf_) want to do their own authentication using an upstream OpenID Connect provider and don't have a mechanism to rely on authentication performed by ingress-nginx.
-Specific Science Platform installations may also be used as an authentication and authorization service for :abbr:`IDACs (International Data Access Centers)` (see :dmtn:`253`).
+Specific Science Platform installations may also be used as an authentication and authorization service for :abbr:`IDACs (International Data Access Centers)`.
 To support those use cases, Gafaelfawr can also serve as a simple OpenID Connect provider.
 
 .. _Chronograf: https://www.influxdata.com/time-series-platform/chronograf/
@@ -621,20 +621,22 @@ It also omits the ingress layer and any calls from Gafaelfawr to LDAP to get the
 In detail:
 
 #. The user goes to an service that uses Gafaelfawr as an OpenID Connect authentication provider.
-#. The service redirects the user to ``/auth/openid/login`` with some additional parameters in the URL including the registered client ID and an opaque state parameter.
+#. The service redirects the user to ``/auth/openid/login`` with some additional parameters in the URL including the registered client ID, an opaque state parameter, and the list of requested OpenID Connect scopes.
 #. If the user is not already authenticated, Gafaelfawr authenticates the user using the :ref:`normal browser flow <browser-flows>`, sending the user back to the same ``/auth/openid/login`` URL once that authentication has completed.
 #. Gafaelfawr validates the login request and then redirects the user back to the protected service, including an authorization code in the URL.
-#. The protected service presents that authorization code to ``/auth/openid/token``.
+#. The protected service presents that authorization code to ``/auth/openid/token`` along with its authentication credentials.
 #. Gafaelfawr validates that code and returns a JWT representing the user to the protected service.
-   That JWT has a hard-coded scope of ``openid``.
+   Currently, that JWT is returned as both the ID token and the access token.
+   In the future, the access token will be a short, opaque token, and only the ID token will be a JWT.
    The authorization code is then invalidated and cannot be used again.
 #. The protected service should validate the signature on the JWT by retrieving metadata about the signing key from ``/.well-known/openid-configuration`` and ``/.well-known/jwks.json``, which are also served by Gafaelfawr.
-#. The protected service optionally authenticates as the user to ``/auth/userinfo``, using that JWT as a bearer token, and retrieves metadata about the authenticated user.
+#. The protected service optionally authenticates as the user to ``/auth/userinfo``, using the access token as a bearer token, and retrieves metadata about the authenticated user.
    Alternately, the protected service can read information directly from the JWT claims.
 
-In order to use the OpenID Connect authentication flow, a service has to have a client ID and secret.
-The list of valid client IDs and secrets for a given deployment are stored as a JSON blob in the Gafaelfawr secret.
-The OpenID Connect relying party presents the client ID and secret as part of the request to redeem a code for a token.
+In order to use the OpenID Connect authentication flow, a service has to pre-register a client ID, secret, and return URL.
+The list of valid client IDs, secrets, and return URLs for a given deployment are stored as a JSON blob in the Gafaelfawr secret.
+Gafaelfawr will only allow authentication if the ``redirect_uri`` parameter matches the registered return URL for the requesting client.
+The OpenID Connect relying party must then present that same client ID, secret, and ``redirect_uri`` as part of the request to redeem a code for a token.
 
 This is the OpenID Connect authorization code flow.
 See the `OpenID Connect specification <https://openid.net/specs/openid-connect-core-1_0.html>`__ for more information.
@@ -642,9 +644,13 @@ This implementation has the following protocol limitations:
 
 .. rst-class:: compact
 
-- Only the authorization code flow is supported.
-- Only the ``openid`` scope is supported in the client request.
-- The client must authenticate by sending a ``client_secret`` parameter in the request to the token endpoint.
+- Only the ``authorization_code`` grant type is supported, and only the ``code`` response type is supported.
+- Only the ``client_secret_post`` token authentication method is supported.
+- Only ``GET`` requests to the authorization endpoint are supported.
+- Most optional features of the OpenID Connect protocol are not yet supported.
+
+Gafaelfawr supports a custom ``rubin`` OpenID Connect scope that, if requested, adds the ``data_rights`` claim to the ID token with a space-separated list of data releases to which the user has access.
+This list is generated based on the user's group membership and a mapping from groups to data releases that is manually maintained in the Gafaelfawr configuration.
 
 The authorization codes Gafaelfawr returns as part of this OpenID Connect authentication flow are stored in :ref:`Redis <redis-oidc>`.
 
@@ -658,6 +664,8 @@ The public key used for the JWT signature is published at the standard ``/.well-
 
 Gafaelfawr does no scope or other authorization checks when doing OpenID Connect authentication.
 All checks are left to the application that initiates the authentication.
+
+For more details about the OpenID Connect authentication flow and its intended use by IDACs, see :dmtn:`253`.
 
 Specific services
 =================
