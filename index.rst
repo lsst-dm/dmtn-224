@@ -626,12 +626,13 @@ In detail:
 #. Gafaelfawr validates the login request and then redirects the user back to the protected service, including an authorization code in the URL.
 #. The protected service presents that authorization code to ``/auth/openid/token`` along with its authentication credentials.
 #. Gafaelfawr validates that code and returns a JWT representing the user to the protected service.
-   Currently, that JWT is returned as both the ID token and the access token.
-   In the future, the access token will be a short, opaque token, and only the ID token will be a JWT.
+   It also returns, as the access token, a Gafaelfawr token of type ``oidc`` with no scopes.
    The authorization code is then invalidated and cannot be used again.
 #. The protected service should validate the signature on the JWT by retrieving metadata about the signing key from ``/.well-known/openid-configuration`` and ``/.well-known/jwks.json``, which are also served by Gafaelfawr.
-#. The protected service optionally authenticates as the user to ``/auth/userinfo``, using the access token as a bearer token, and retrieves metadata about the authenticated user.
-   Alternately, the protected service can read information directly from the JWT claims.
+   The protected service can then read information directly from the JWT claims.
+#. The protected service optionally authenticates as the user to ``/auth/userinfo``, using the access token as a bearer token, and retrieve metadata about the authenticated user.
+   This is an OpenID Connect Userinfo endpoint and follows the rules in that specification.
+   Gafaelfawr currently returns all available claims from any scope rather than restricting the list of claims to those requestsed by the client, and does not support claim restrictions on the userinfo response.
 
 In order to use the OpenID Connect authentication flow, a service has to pre-register a client ID, secret, and return URL.
 The list of valid client IDs, secrets, and return URLs for a given deployment are stored as a JSON blob in the Gafaelfawr secret.
@@ -648,6 +649,7 @@ This implementation has the following protocol limitations:
 - Only the ``client_secret_post`` token authentication method is supported.
 - Only ``GET`` requests to the authorization endpoint are supported.
 - Most optional features of the OpenID Connect protocol are not yet supported.
+- Scopes and claim requests or restrictions are not supported in the userinfo endpoint.
 
 Gafaelfawr supports a custom ``rubin`` OpenID Connect scope that, if requested, adds the ``data_rights`` claim to the ID token with a space-separated list of data releases to which the user has access.
 This list is generated based on the user's group membership and a mapping from groups to data releases that is manually maintained in the Gafaelfawr configuration.
@@ -1108,7 +1110,7 @@ A typical ``GafaelfawrIngress`` resource looks like the following:
 
 The ``config`` portion contains the authentication and authorization configuration, and the ``template`` portion is copied mostly verbatim into the constructed ``Ingress`` resource.
 
-For more details, see the `Gafaelfawr documentation <https://gafaelfawr.lsst.io/>`__.
+For more details, see the `Gafaelfawr documentation <https://gafaelfawr.lsst.io/user-guide/gafaelfawringress.html>`__.
 
 ``GafaelfawrIngress`` can, and should, also be used to create ingresses for services that don't require authentication.
 In this anonymous case, Gafaelfawr is invoked only to filter cookies and tokens out of the headers before the rqeuest is passed to the underlying service.
