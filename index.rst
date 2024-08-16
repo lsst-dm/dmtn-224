@@ -762,12 +762,15 @@ CADC services
 IVOA services maintained by the Canadian Astronomy Data Center (CADC) use a standard authentication system that presents a token to a user information endpoint and expects a JSON object of OpenID Connect claims in response.
 The username of the authenticated user is retrieved from the ``preferred_username`` key.
 
-This poses two challenges: this format does not match the normal format of the Gafaelfawr userinfo endpoint, which uses a ``username`` key rather than the OpenID Connect ``preferred_username`` claim name; and the current implementation of that shared authentication code requires that the ``sub`` key hold a UUID.
+This poses a challenge: this format does not match the normal format of the Gafaelfawr userinfo endpoint, which uses a ``username`` key rather than the OpenID Connect ``preferred_username`` claim name.
 
 Currently, Gafaelfawr provides a separate endpoint specifically for CADC software (``/auth/cadc/userinfo``) that returns user metadata in the expected format.
-The ``sub`` value returned by that endpoint is set to a v5 UUID derived from a namespace (which is a random v4 UUID per Science Platform deployment) and the numeric UID of the user.
+The username is returned in both the ``preferred_username`` and ``sub`` keys so that the username will be stored as the owner in the UWS job table.
 
-Hopefully in the future the CADC requirement for a UUID will be relaxed and some of the pecularities of this implementation can be retired.
+This approach is not entirely correct since the CADC authentication code expects ``sub`` to be set to a permanently unique identifier for a user, and the username may change.
+This will need to be rethought once we start work on support for changing usernames.
+
+In the future, we may merge this endpoint with the userinfo endpoint of the OpenID Connect server to avoid having two routes that are doing roughtly the same thing.
 
 Storage
 =======
@@ -1012,7 +1015,11 @@ This can happen from frequent API calls, but is even more common for users using
 Gafaelfawr therefore must be able to answer those subrequests as quickly as possible, and should not pass that query load to backend data stores and other services that may not be able to handle that volume.
 
 This is done via caching.
-In most places where Gafaelfawr is described as retrieving information from another service, this is done through an in-memory cache.
+
+Internal caching
+----------------
+
+In most places where Gafaelfawr is described as retrieving information from another service, that data is cached in memory.
 Gafaelfawr also caches notebook and internal tokens for a specific token to avoid creating many new internal child tokens in short succession.
 
 Gafaelfawr uses the following caches:
@@ -1058,6 +1065,20 @@ That lock scheme works as follows:
 #. Release the lock on the dictionary of users to locks.
 
 The operation protected by the lock is then performed, and the per-user lock is released at the end of that operation.
+
+NGINX caching
+-------------
+
+Gafaelfawr runs as an NGINX ``auth_request`` subhandler.
+By default, every request to any service running in the Science Platform results in an ``auth_request`` subrequest to Gafaelfawr.
+
+Gafaelfawr is fairly efficient, so usually this doesn't cause problems.
+However, if a Science Platform service regularly gets a flurry of requests in close succession, these Gafaelfawr calls can be inefficient and add unwanted load and latency.
+Typical examples of this are web applications such as JupyterLab or the Portal Aspect, which may request large numbers of web resources (images and JavaScript libraries) or send high-frequency requests from JavaScript to support dynamic page updates.
+
+In those cases, Gafaelfawr configures NGINX itself to cache the ``auth_request`` responses from Gafaelfawr for a short period of time.
+This tells NGINX to reuse the first Gafaelfawr response for all subsequent responses, provided that neither the ``Cookie`` nor the ``Authorization`` headers have changed.
+Selectively enabling this caching (done via a ``GafaelfawrIngress`` Kubernetes resource, discussed in :ref:`gafaelfawringress`) significantly reduces the number of requests to Gafaelfawr for those applications, at the cost of not noticing session termination or expiration for up to the duration of the cache.
 
 .. _kubernetes:
 
