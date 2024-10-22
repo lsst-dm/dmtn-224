@@ -278,7 +278,8 @@ This section assumes the COmanage account for the user already exists if COmanag
 If it does not, see :ref:`comanage-onboarding`.
 
 See the `Gafaelfawr documentation <https://gafaelfawr.lsst.io/>`__ for specific details on the ingress-nginx_ annotations used to protect services and the HTTP headers that are set and available to be passed down to the service after successful authentication.
-The preferred way to create the ingress annotations is to use a ``GafaelfawrIngress`` custom resource (see :ref:`gafaelfawringress`), but the annotations can also be added directly if necessary.
+The ingress annotations should be managed by creating a ``GafaelfawrIngress`` custom resource (see :ref:`gafaelfawringress`) rather than an ``Ingress`` resource.
+The ``gafaelfawr-operator`` pod will then create the corresponding ``Ingress`` resource.
 
 .. _browser-flows:
 
@@ -513,9 +514,30 @@ In this case, it will return the 401 challenge to the client instead of redirect
 
 When authenticating a request with a token, Gafaelfawr does not care what type of token is presented.
 It may be a user, notebook, internal, or service token; all of them are handled the same way.
+The same is true of oidc tokens, although at present oidc tokens are never issued with scopes and therefore generally cannot be used to authenticate to anything other than Gafaelfawr itself.
 
 Service tokens, used for service-to-service API calls unrelated to a specific user request, are managed as Kubernetes secrets via a Kubernetes custom resource.
 For more details, see :ref:`gafaelfawrservicetoken`.
+
+.. _service-service:
+
+Service-to-service authentication
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+There are some cases in a microservice architecture where it is desirable for a service to make calls to a lower-level service on behalf of the user, but to not allow the user to make calls to the lower-level service directly.
+One example is the UWS storage service proposed in :sqr:`096`.
+
+Gafaelfawr implements this as a token authentication flow.
+The higher-level service requests a delegated token with appropriate scopes to call the lower-level service, as normal.
+The lower-level service then uses a Gafaelfawr-protected ingress that limits access to a specific named list of other services.
+
+In this mode, Gafaelfawr will reject authentication from any token other than an internal token.
+When presented with an internal token, it will retrieve the name of the service to which that internal token was issued and check that it is on the allow list of services permitted to access the lower-level service.
+If the user attempts to authenticate directly, they will be using a token type other than internal and their token will not be associated with a service, so their access will be denied.
+
+In order for this security model to work, users must not have the ability to create or access internal tokens created for services.
+This implies that the route intended for ingress-nginx_ auth subrequests not be exposed to the user.
+See :ref:`ingress-integration` for more details on how that's accomplished.
 
 .. _token-reuse:
 
@@ -544,6 +566,8 @@ If a notebook or internal token already exists that meet these criteria, that to
 
 Notebook and internal tokens are also cached to avoid the SQL and Redis queries required to find a token that can be reused.
 See :ref:`caching` for more information.
+
+.. _network-policy:
 
 Network policy
 --------------
@@ -772,6 +796,42 @@ This will need to be rethought once we start work on support for changing userna
 
 In the future, we may merge this endpoint with the userinfo endpoint of the OpenID Connect server to avoid having two routes that are doing roughtly the same thing.
 
+.. _ingress-integration:
+
+Ingress integration
+===================
+
+Gafaelfawr runs as an auth subrequest handler for ingress-nginx_, configured via annotations on the ``Ingress`` Kubernetes resource.
+(See :ref:`gafaelfawringress` for more details about how that is managed.)
+For each (uncached, see :ref:`nginx-caching`) icoming request, NGINX makes a subrequest to Gafaelfawr to determine whether to allow that request and to retrieve headers to add to the request.
+
+In order to securely support service-to-service authentication flows (see :ref:`service-service`), the route used by the ingress for auth subrequests must not be accessible to users.
+Otherwise, the user could ask that route directly for an internal token for an arbitrary service and bypass service-only restrictions on ingresses.
+
+This is done in Gafaelfawr by ensuring the two routes used only by the ingress, ``/ingress/auth`` and ``/ingress/anonymous``, are not exposed by the Gafaelfawr Kubernetes ``Ingress`` resources.
+These routes therefore can only be accessed by connecting to the Kubernetes Gafaelfawr ``Service`` directly, which in turn is restricted to the ingress-nginx_ pod by ``NetworkPolicy`` configuration (see :ref:`network-policy`).
+In other words, a typical annotation added to an ``Ingress`` resource generated by Gafaelfawr will look like:
+
+.. code-block:: yaml
+
+    nginx.ingress.kubernetes.io/auth-signin: https://data-dev.lsst.cloud/login
+    nginx.ingress.kubernetes.io/auth-url: >-
+      http://gafaelfawr.gafaelfawr.svc.cluster.local:8080/ingress/auth?scope=exec%3Aadmin
+
+The sign-in URL, to which brower users will be redirected if not authenticated, uses the normal public URL of the Science Platform deployment.
+The auth subrequest URL, used only by the ingress, uses the internal Gafaelfawr ``Service`` address and the private ``/ingress/auth`` route.
+
+Gafaelfawr by default assumes that the domain of the cluster is ``cluster.local``, the Kubernetes default.
+Unfortunately, this can be configured in Kubernetes but is not exposed to Kubernetes resources or to Helm, so clusters that change the internal domain will need to override Gafaelfawr's understanding of its internal URL in the Gafaelfawr chart configuration.
+
+Because the ingress-nginx service must make cluster-internal calls to Gafaelfawr, ingress-nginx must be running in the same Kubernetes cluster as Gafaelfawr.
+Configurations where ingress-nginx runs outside of the cluster, including configurations where Gafaelfawr is running in a vCluster_ and ingress-nginx is running in the host cluster, are not supported.
+
+.. _vCluster: https://www.vcluster.com/
+
+Gafaelfawr also requires other specific ingress-nginx configuration, including NGINX configuration injected into the NGINX server configuration stanza.
+This is handled by the ingress-nginx Helm chart in Phalanx_.
+
 Storage
 =======
 
@@ -946,10 +1006,23 @@ The cookie is an encrypted JSON document with the following keys, not all of whi
   Only set while a login is in progress.
 * **state**: Random state for the login process, used to protect against session fixation.
   Only set while a login is in progress.
+* **login_start**: Start time of login process, for metrics.
+  Only set while a login is in progress.
 
 The JSON document is encrypted with Fernet_ using the same key as is used for the Redis backend store.
 The resulting encrypted data is set as the ``gafaelfawr`` cookie.
 This cookie is marked ``Secure`` and ``HttpOnly``.
+
+Handling of the login state requires some additional discussion.
+Before the user is redirected to the upstream authentication provider, the ``state`` field in the cookie is set to a random state token that is also shared with the upstream authentication provider.
+Until the user presenting that cookie either successfully completes or fails the authentication process, that same state token is used.
+This ensures that if the user is redirected multiple times (from multiple browser tabs, for example), they can authenticate in any of those windows and the state will still match, allowing the authentication to succeed.
+
+Once the user has successfully completed authentication, the state is deleted from their cookie since it cannot be reused.
+However, if the user is sitting at an authentication screen in multiple tabs, successfully authenticates in one, and then later successfully authenticates in another one, it's not desirable for that second authentication to result in an error.
+To avoid that problem while still not reusing state, Gafaelfawr detects a user return from authentication with no ``state`` present in the user's cookie.
+This should be impossible except in this repeated authentication case, so in this case Gafaelfawr silently redirects the user to their destination URL without completing the authentication.
+The user will either already be authenticated due to a prior successful authentication, in which case the correct behavior will result, or the authentication will have failed, in which case the user will get a new state and will start the authentication flow over.
 
 .. _firestore:
 
@@ -1066,6 +1139,8 @@ That lock scheme works as follows:
 
 The operation protected by the lock is then performed, and the per-user lock is released at the end of that operation.
 
+.. _nginx-caching:
+
 NGINX caching
 -------------
 
@@ -1095,9 +1170,9 @@ The Kubernetes operator uses Kopf_ to handle the machinery of processing updates
 Ingresses
 ---------
 
-The recommended way to create an ``Ingress`` resource for a protected resource is to use the ``GafaelfawrIngress`` custom resource definition.
-Gafaelfawr will then create an ``Ingress`` resource based on that custom resource while performing sanity checks and generating the authentication-related NGINX annotations.
-Using this custom resource also makes it easier to maintain Science Platform services, since future versions of Gafaelfawr can adjust the NGINX annotations as needed without requiring any changes to the underlying resource.
+The supported way to create an ``Ingress`` resource for a protected resource is to use the ``GafaelfawrIngress`` custom resource definition.
+Gafaelfawr (via the ``gafaelfawr-operator`` pod) will then create an ``Ingress`` resource based on that custom resource while performing sanity checks and generating the authentication-related NGINX annotations.
+Using this custom resource makes it easier to maintain Science Platform services, since future versions of Gafaelfawr can adjust the NGINX annotations as needed without requiring any changes to the underlying resource.
 
 A typical ``GafaelfawrIngress`` resource looks like the following:
 
@@ -1108,11 +1183,10 @@ A typical ``GafaelfawrIngress`` resource looks like the following:
    metadata:
      name: <service>
    config:
-     baseUrl: <base-url>
+     loginRedirect: true
      scopes:
        all:
          - <scope>
-     loginRedirect: true
    template:
      metadata:
        name: <service>
@@ -1136,7 +1210,7 @@ For more details, see the `Gafaelfawr documentation <https://gafaelfawr.lsst.io/
 ``GafaelfawrIngress`` can, and should, also be used to create ingresses for services that don't require authentication.
 In this anonymous case, Gafaelfawr is invoked only to filter cookies and tokens out of the headers before the rqeuest is passed to the underlying service.
 This prevents leaking security credentials to a service, where they could be stolen in the event of a service compromise.
-For more details, see :sqr:`051`.
+For more details on why this is important, see :sqr:`051`.
 
 .. _gafaelfawrservicetoken:
 
@@ -1360,6 +1434,19 @@ Gafaelfawr also supports notifying a Slack channel (also via an incoming webhook
 
 Once a day, a ``CronJob`` resource runs an audit check on Gafaelfawr's data sources looking for inconsistencies.
 Any found are reported to a Slack channel if the Slack incoming webhook is configured.
+
+Metrics
+=======
+
+Gafaelfawr supports exporting metrics to Sasquatch_, the Rubin Observatory metrics and telemetry service.
+This support is optional.
+
+.. _Sasquatch: https://sasquatch.lsst.io/
+
+If enabled, Gafaelfawr uses the support for publishing metrics events in Safir_ to register possible event types with the Sasquatch schema registry and then publishes events to Kafka.
+Currently, all metrics are published as events with associated data fields, including some metrics published by the maintenance cron job that would be more correctly represented as gauge metrics.
+
+For more details about the published events, see the `Gafaelfawr documentation <https://gafaelfawr.lsst.io/user-guide/metrics.html>`__.
 
 .. _references:
 
