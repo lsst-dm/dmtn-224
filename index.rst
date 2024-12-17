@@ -325,7 +325,7 @@ The details of steps 5 and 6 vary depending on the authentication provider, as d
    It retrieves the token details from the token store and decrypts and verifies it.
    It then checks the scope information of that token against the requested authentication scope given as a ``scope`` parameter to the ``/auth`` route.
    If the requested scope or scopes are not satisfied, it returns a 403 error.
-   If LDAP is configured, user metadata such as group memberships and email address are retrieved from LDAP.
+   If LDAP is configured, user metadata such as email address is retrieved from LDAP.
 #. The metadata, either from the data stored with the token or from LDAP, is added to additional response headers.
    Gafaelfawr also copies the ``Authorization`` and ``Cookie`` headers from the incoming request to the reply with any Gafaelfawr tokens or cookies removed.
    Gafaelfawr then returns 200 with those response headers, and NGINX then proxies the request to the protected application and user interaction continues as normal.
@@ -657,6 +657,7 @@ In detail:
 #. The protected service optionally authenticates as the user to ``/auth/userinfo``, using the access token as a bearer token, and retrieve metadata about the authenticated user.
    This is an OpenID Connect Userinfo endpoint and follows the rules in that specification.
    Gafaelfawr currently returns all available claims from any scope rather than restricting the list of claims to those requestsed by the client, and does not support claim restrictions on the userinfo response.
+   This endpoint accepts tokens of type ``internal`` as well as ``oidc`` for reasons explained in :ref:`cadc`.
 
 In order to use the OpenID Connect authentication flow, a service has to pre-register a client ID, secret, and return URL.
 The list of valid client IDs, secrets, and return URLs for a given deployment are stored as a JSON blob in the Gafaelfawr secret.
@@ -698,7 +699,11 @@ Specific services
 
 The general pattern for protecting a service with authentication and access control is configure its ``Ingress`` resources with the necessary ingress-nginx annotations and then let Gafaelfawr do the work.
 If the service needs information about the user, it obtains that from the ``X-Auth-Request-*`` headers that are set by Gafaelfawr via ingress-nginx, or by requesting a delegated token and then using the token API to retrieve details about the token or the user's identity information.
-However, some Science Platform services require additional special attention.
+
+If the service requests a delegated token, that token will be present in the ``X-Auth-Request-Token`` header of the request as passed to the service.
+Optionally, it can instead be put in the ``Authorization`` header as a bearer token.
+
+Some Science Platform services require additional special attention.
 
 .. _notebook-aspect:
 
@@ -717,7 +722,6 @@ In the current Science Platform implementation, that session database is stored 
 The data stored in the authentication session is additionally encrypted with a key known only to JupyterHub.
 
 The ingress for JupyterHub is configured to require Gafaelfawr authentication and access control for all JupyterHub and lab URLs.
-(This is done by adding the necessary annotations as part of the JupyterHub configuration, rather than via a ``GafaelfawrIngress`` custom resource, since the JupyterHub ingress is managed by its own Helm chart.)
 Therefore, regardless of what JupyterHub and the lab think is the state of the user's authentication, the request is not allowed to reach them unless the user is already authenticated, and any redirects to the upstream identity provider are handled before JupyterHub ever receives a request.
 The user is also automatically redirected to the upstream identity provider to reauthenticate if their credentials expire while using JupyterHub.
 The ingress configuration requests a delegated notebook token.
@@ -780,21 +784,27 @@ The Portal Aspect wants several scopes for its delegated token so that it can pe
 It therefore takes advantage of Gafaelfawr's support for requesting delegated scopes that may or may not be available.
 If the user's authenticating token has the scopes it prefers, it gets an internal token with those scopes; otherwise, it gets an internal token with whatever subset of the scopes the user has, but the authentication still succeeds as long as the user has ``exec:portal`` access (the scope used to control all access to the Portal Aspect).
 
+.. _cadc:
+
 CADC services
 -------------
 
 IVOA services maintained by the Canadian Astronomy Data Center (CADC) use a standard authentication system that presents a token to a user information endpoint and expects a JSON object of OpenID Connect claims in response.
 The username of the authenticated user is retrieved from the ``preferred_username`` key.
 
-This poses a challenge: this format does not match the normal format of the Gafaelfawr userinfo endpoint, which uses a ``username`` key rather than the OpenID Connect ``preferred_username`` claim name.
+This authentication system assumes that user information endpoint is an OpenID Connect Userinfo endpoint, and therefore it queries the ``/.well-known/openid-configuration`` route and uses the value of ``userinfo_endpoint`` to vind that endpoint.
+It doesn't, however, use a full OpenID Connect authentication workflow.
+It just presents whatever token it receives in the ``Authorization`` header to that endpoint and expects to get results in the format of an OpenID Connect Userinfo response.
 
-Currently, Gafaelfawr provides a separate endpoint specifically for CADC software (``/auth/cadc/userinfo``) that returns user metadata in the expected format.
-The username is returned in both the ``preferred_username`` and ``sub`` keys so that the username will be stored as the owner in the UWS job table.
+To put those services behind Gafaelfawr, we configure them to request a delegated token with no scopes and tell Gafaelfawr to put the delegated token as a bearer token in an ``Authorization`` header intead of ``X-Auth-Request-Token``.
+Then, we configure the CADC service with the base URL of the Science Platform as its "OpenID Connect provider."
+Finally, we enable the Gafaelfawr OpenID Connect server so that the ``/.well-known/openid-configuration`` and Userinfo endpoints are enabled.
 
-This approach is not entirely correct since the CADC authentication code expects ``sub`` to be set to a permanently unique identifier for a user, and the username may change.
-This will need to be rethought once we start work on support for changing usernames.
+Gafaelfawr accepts token types of either ``oidc`` or ``internal`` at its OpenID Connect Userinfo endpoint, so when the CADC code presents an internal token there, it responds with an OpenID Connect Userinfo response, including ``preferred_username``.
+This satisfies the needs of the CADC code.
 
-In the future, we may merge this endpoint with the userinfo endpoint of the OpenID Connect server to avoid having two routes that are doing roughtly the same thing.
+This approach is a little awkward since it requires enabling the OpenID Connect server even if it is not used directly as an OpenID Connect identity provider, and it results in CADC applications relying on OpenID Connect metadata and presenting a token to the Userinfo endpoint that has nothing to do with OpenID Connect.
+But it seems to work well in practice and has the huge advantage of not requiring any modifications or special configuration of the CADC code.
 
 .. _ingress-integration:
 
