@@ -854,6 +854,7 @@ It contains enough information to verify the authentication of a request and ret
 The SQL database stores metadata about a user's tokens, including the list of currently valid tokens, their relationships to each other, and a history of where they have been used from.
 
 If the user's identity information doesn't come from LDAP, Redis also stores the identity information.
+Redis is also used to store rate limiting information and temporary data when acting as an OpenID Connect authentication provider.
 
 .. _token-format:
 
@@ -875,6 +876,11 @@ Wherever the token is named, such as in UIs, only the ``<key>`` component is giv
 
 Redis
 -----
+
+Gafaelfawr uses two separate Redis pools: one with persistent storage and one with only ephemeral (in-memory storage).
+
+Persistent Redis
+^^^^^^^^^^^^^^^^
 
 Redis is canonical for whether a token exists and is valid.
 If a token is not found in Redis, it cannot be used to authenticate, even if it still exists in the SQL database.
@@ -935,11 +941,11 @@ Because the secret is in a Fernet-encrypted blog, someone who can list the keys 
 
 .. _redis-oidc:
 
-OpenID Connect codes
-^^^^^^^^^^^^^^^^^^^^
+Ephemeral Redis
+^^^^^^^^^^^^^^^
 
 As part of the :ref:`internal OpenID Connect flow <oidc-flow>`, Gafaelfawr has to issue an authentication code that can be redeemed later for a JWT.
-These codes are also stored in Redis.
+These codes are stored in an ephemeral Redis, since they exist only temporarily during an OpenID Connect authentication.
 
 The code itself uses the same format as a :ref:`token <token-format>`, except it starts with ``gc-`` instead of ``gt-``.
 It has the form ``gc-<key>.<secret>``.
@@ -963,6 +969,9 @@ As soon as the code is redeemed for a JWT, it is deleted from Redis, so it canno
 Codes are not stored anywhere else, so once they expire or are redeemed they are permanently forgotten.
 
 The code JSON document is encrypted with Fernet_ in exactly the same way that token information is encrypted.
+
+The ephemeral Redis instance also stores rate limiting information.
+See :ref:`rate-limiting` for more information.
 
 SQL database
 ------------
@@ -1222,6 +1231,8 @@ In this anonymous case, Gafaelfawr is invoked only to filter cookies and tokens 
 This prevents leaking security credentials to a service, where they could be stolen in the event of a service compromise.
 For more details on why this is important, see :sqr:`051`.
 
+All ingresses created by Gafaelfawr from ``GafaelfawrIngress`` will have the label ``app.kubernetes.io/managed-by`` set to the value ``Gafaelfawr`` to allow easy detection of Gafaelfawr-managed ingresses.
+
 .. _gafaelfawrservicetoken:
 
 Service tokens
@@ -1374,6 +1385,31 @@ Direct API calls authenticating with the ``Authorization`` header can ignore thi
 
 Cross-origin requests are not supported, and therefore the token API responds with an error to ``OPTIONS`` requests.
 
+Quota
+=====
+
+Gafaelfawr calculates quota for each user from its configuration and from any temporary quota overrides created via its REST API.
+Dynamically-configured quota overrides are stored in the persistent Redis.
+
+For all of the implementation details, see :sqr:`073`.
+
+.. _rate-limiting:
+
+Rate limiting
+-------------
+
+Gafaelfawr directly enforces API rate limits, if any are configured, by counting the requests to a service that pass thorugh its ingress authentication route (see :ref:`ingress-integration`).
+The data tracking is done using the Python limits_ library using 15-minute fixed windows.
+Tracking data is stored in the ephemeral Redis instance.
+
+.. _limits: https://limits.readthedocs.io/en/stable/
+
+More complex windowing and different window intervals may be added later if this proves insufficient.
+
+Rate limiting information is returned for all successful requests in ``X-RateLimit-*`` headers.
+Requests that are rejected due to rate limiting result in a 429 response with the same headers plus the standard HTTP ``Retry-After`` header.
+See :sqr:`073` for all of the details.
+
 Logging
 =======
 
@@ -1493,8 +1529,7 @@ Design
     If implemented, the details as implemented will be incorporated into this document and :dmtn:`234`.
 
 :sqr:`073`
-    Proposed design for user quotas and API rate limiting.
-    If implemented, the details as implemented will be incorporated into this document and :dmtn:`234`.
+    Design and implementation details for user quotas and API rate limiting.
 
 Security
 --------
@@ -1520,12 +1555,15 @@ Other implementation tech notes are:
 :sqr:`069`
     Documents the decisions, trade-offs, and analysis behind the current design and implementation of the identity management system.
 
+:sqr:`073`
+    Design and implementation details for user quotas and API rate limiting.
+
 Operations
 ----------
 
 Gafaelfawr_
     The primary component of the identity management system.
-    Its documentation covers operational issues such as configuration and maintenance.
+    Its documentation covers operational issues such as configuration and maintenance, and includes the detailed reference to its REST API.
 
 Phalanx_
     The configuration and deployment infrastructure for the Science Platform.
