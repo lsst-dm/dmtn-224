@@ -414,7 +414,7 @@ OpenID Connect
 Here is the OpenID Connect authentication flow in detail.
 
 .. mermaid:: flow-login-oidc.mmd
-   :caption: GitHub browser authentication flow
+   :caption: OIDC browser authentication flow
 
 This diagram omits the ingress, the initial unauthenticated redirect to ``/login``, and the service to which the user is sent once the login process is complete.
 All of those steps happen identically to the :ref:`generic browser flow <generic-browser-flow>`.
