@@ -1421,6 +1421,16 @@ Direct API calls authenticating with the ``Authorization`` header can ignore thi
 
 Cross-origin requests are not supported, and therefore the token API responds with an error to ``OPTIONS`` requests.
 
+IVOA GMS API
+============
+
+For ease of integration with astronomy services, Gafaelfawr also implements the IVOA `Group Membership Service Version 1.0 <https://www.ivoa.net/documents/GMS/20220222/REC-GMS-1.0.html>`__ specification.
+This is a simple plain-text API that can list the names of the groups that an authenticated user belongs to, and optionally perform some simple set intersection.
+
+The IVOA web authentication standards are currently in a state of flux, so none of them are fully supported by Gafaelfawr.
+Authentication to this GMS service is handled the same as any other authenticated Gafaelfawr API endpoint: The request must contain a Gafaelfawr cookie with a valid token or present a valid token in the ``Authorization`` header (using either ``Basic`` or ``Bearer``).
+Once the IVOA web authentication standards have settled out and support the style of bearer token authentication used by Gafaelfawr, this endpoint will be updated to support IVOA-standard authentication.
+
 Quota
 =====
 
