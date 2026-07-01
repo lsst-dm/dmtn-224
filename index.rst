@@ -1318,9 +1318,26 @@ Generated API documentation is available as part of the `Gafaelfawr documentatio
 .. _FastAPI: https://fastapi.tiangolo.com/
 .. _OpenAPI: https://www.openapis.org/
 
-The API is divided into two parts: routes that may be used by an individual user to manage and view their own tokens, and routes that may only be used by an administrator.
-Administrators are defined as users with authentication tokens that have the ``admin:token`` scope.
-The first set of routes can also be used by an administrator and, unlike an individual user, an administrator can specify a username other than their own.
+There are four general classes of routes in the API:
+
+#. Routes to retrieve information about a token or its associated user.
+   These are normally used by services via delegated internal tokens to get user information, such as UID, GID, group membership, full name, or email address.
+   They can also be used directly by the user for debugging.
+
+#. Routes for a user to manage and retrieve history for their own tokens.
+   These routes require the ``user:token`` scope and are primarily used by the token UI built in to Squareone_, but can also be used by the user directly if they wish.
+   Applications should not be delegated the ``user:token`` scope, thus ensuring that they do not have access to these routes even when acting on behalf of the user in other ways.
+
+#. Routes to retrieve user information for an arbitrary user without having a token for that user.
+   This is only supported when using LDAP as the user information source.
+   It is needed by some applications that do not have an easy way to get a delegated token for the user, such as provisioning resources for newly-created groups or processing requests for a user that were sent via a message bus that should not receive user tokens.
+   These routes require the ``admin:userinfo`` scope.
+
+#. Routes for admins to manage and retrieve history for all tokens and to create tokens for arbitrary users, including bot users representing services.
+   These routes allow arbitrary impersonation of users and should therefore only be accessible to a small number of trusted admins.
+   These routes require the ``admin:token`` scope.
+
+.. _Squareone: https://squareone.lsst.io/
 
 All APIs return JSON documents.
 APIs that modify state expect JSON request bodies.
