@@ -1403,25 +1403,6 @@ Example headers for a paginated result::
 Links of type ``next``, ``prev``, and ``first`` will be included.
 ``last`` is not implemented.
 
-Token UI
---------
-
-The token component of the identity management system also has a user-facing UI.
-From that UI, a user of the Science Platform can see their existing tokens, create or manage their user tokens, and see a history of changes to their tokens.
-
-This UI is implemented in client-side JavaScript (using React_) and performs all of its operations via the token API.
-This ensures that there is one implementation of any token operation, used by both the API and the UI.
-The API provides a login route to the UI that provides the CSRF token (see :ref:`csrf`) and configuration information required to construct the UI.
-
-.. _React: https://reactjs.org/
-
-Currently, the UI is maintained as part of Gafaelfawr and served as static web pages by the same web service that serves the token API and the auth subrequest handler for ingress-nginx.
-It uses Gatsby_ to compile the web UI into JavaScript bundles suitable for serving to a web browser.
-The current implementation is purely functional with no styling and a poor user interface, intended only as a proof of concept.
-In the future, this UI is likely to move into another Science Platform service responsible for browser UI for the Science Platform as a whole.
-
-.. _Gatsby: https://www.gatsbyjs.com/
-
 .. _csrf:
 
 CSRF protection
@@ -1432,11 +1413,19 @@ The session cookie method is used by the token UI.
 Direct API calls will use the ``Authorization`` header.
 
 All API ``POST``, ``PATCH``, ``PUT``, or ``DELETE`` calls authenticated via session cookie must include an ``X-CSRF-Token`` header in the request.
-The value of this header is obtained via a login route, used by the token UI.
+The value of this header is obtained via a login route, used by any token user interfaces.
 This value will be checked by the server against the CSRF token included in the user's session cookie.
+
 Direct API calls authenticating with the ``Authorization`` header can ignore this requirement, since cross-site state-changing requests containing an ``Authorization`` header and a JSON payload are blocked by the web security model.
 
-Cross-origin requests are not supported, and therefore the token API responds with an error to ``OPTIONS`` requests.
+Cross-origin requests are not supported.
+The token API responds with an error to ``OPTIONS`` requests.
+
+Token UI
+--------
+
+Gafaelfawr itself only provides a REST API for tokens.
+The user interface that interprets that data and provides users an easy way to view, revoke, and create tokens is part of Squareone_, the landing page and top-level user interface for the Science Platform.
 
 IVOA GMS API
 ============
