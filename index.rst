@@ -79,13 +79,11 @@ Once the user has been authenticated, their identity must be associated with add
 In deployments using federated identity, most of this data comes from :ref:`comanage-idm` (via LDAP), and numeric UIDs and GIDs come from :ref:`firestore`.
 For GitHub deployments, access to the user's profile and organization membership is requested as part of the OAuth 2.0 request, and then retrieved after authentication with the token obtained by the OAuth 2.0 authentication.
 See :ref:`github` for more details.
-With OpenID Connect, this information is either extracted from the claims of the JWT_ issued as a result of the OpenID Connect authentication flow, or is retrieved from LDAP.
-
-.. _JWT: https://datatracker.ietf.org/doc/html/rfc7519
+With OpenID Connect, this information is retrieved from LDAP.
 
 A primary GID must be provided for each user (apart from service tokens for service-to-service access).
 For federated identity and GitHub deployments, the primary GID is the user's user private group (see :ref:`user-private-groups`).
-For deployments that use a local identity provider, the primary GID must come from either a claim in the OpenID Connect ID token or from LDAP.
+For deployments that use a local identity provider, the primary GID must come from LDAP.
 
 See :dmtn:`225` for more details on the identity information stored for each user and its sources.
 
@@ -96,7 +94,7 @@ COmanage
 
 COmanage_ is a web application with associated database and API that manages an organization of users.
 Information about those users is then published to an LDAP server, which can be queried by Gafaelfawr_ as needed.
-COmanage has multiple capabilities, only a few of which will be used by the Science Platform.
+COmanage has multiple capabilities, only a few of which are used by the Science Platform.
 Its main purposes for the Science Platform are to:
 
 #. manage the association of users with federated identities;
@@ -425,23 +423,20 @@ The following specific steps happen during step 6 of the generic browser flow.
 #. Gafaelfawr retrieves the OpenID Connect configuration information for the OpenID Connect provider and checks the signature on the JWT identity token.
 #. Gafaelfawr extracts the user's username from a claim of the identity token.
    (This is configured per OpenID Connect provider.)
-#. If LDAP is not configured, Gafaelfawr extracts the user's identity information from the JWT to store it with the session token.
-#. If LDAP is configured, Gafaelfawr retrieves the user's group membership from LDAP using the username as a key.
+#. Gafaelfawr retrieves the user's group membership from LDAP using the username as a key.
 
-If LDAP is configured, whenever Gafaelfawr receives an authentication subrequest to the ``/auth`` route, it retrieves the user's identity information and group membership from LDAP.
-That data is then returned in HTTP headers that ingress-nginx includes in the request to the Science Platform service being accessed.
-Similarly, if LDAP is configured, Gafaelfawr retrieves the user's identity information and group membership from LDAP whenever it receives a request for the user information associated with a token.
+Whenever Gafaelfawr receives an authentication subrequest to the ``/auth`` route, it retrieves the user's identity information and group membership from LDAP.
+Some of that data is then returned in HTTP headers that ingress-nginx includes in the request to the Science Platform service being accessed.
+Similarly, Gafaelfawr retrieves the user's identity information and group membership from LDAP whenever it receives a request for the user information associated with a token.
 (In practice, the LDAP data is usually cached.  See :ref:`caching` for more information.)
 
-If LDAP is in use, user identity data is not stored with the token.
+User identity data is not stored with the token for user session tokens.
 Gafaelfawr retrieves it on the fly whenever it is needed (possibly via a cache).
 Changes in LDAP are therefore reflected immediately in the Science Platform (after the expiration of any cache entries).
 
-If instead the user's identity information comes from the JWT issued by the OpenID Connect authentication process, that data is stored with the token and inherited by any other child tokens of the session token, or any user tokens created using that session token, similar to how data from GitHub is handled.
-
-Group membership obtained from the OpenID Connect token may or may not include GIDs for each group.
-Missing GIDs are not considered an error, and scopes will still be calculated correctly for groups without GIDs, but no GIDs for groups will be provided to other services.
-This may prevent using groups for access control for services that use a POSIX file system, such as the :ref:`notebook-aspect`.
+Group membership obtained from LDAP may or may not include GIDs for each group.
+Missing GIDs are not considered an error, and scopes will still be calculated correctly for groups without GIDs, but those groups will not be provided to other services.
+This may prevent using groups for access control for services.
 
 Logout flow
 ^^^^^^^^^^^
@@ -458,8 +453,7 @@ Redirect restrictions
 
 The ``/login`` and ``/logout`` routes redirect the user after processing.
 The URL to which to redirect the user may be specified as a ``GET`` parameter or, in the case of ``/login``, an HTTP header that is normally set by ingress-nginx.
-To protect against open redirects, the specified redirect URL must be on the same host as the host portion of the incoming request for the ``/login`` or ``/logout`` route.
-(This is expected to change in the future when the more complex domain scheme proposed in :dmtn:`193` is adopted.)
+To protect against open redirects, the specified redirect URL must be on the same host as the host portion of the incoming request for the ``/login`` or ``/logout`` route or, if subdomain support is enabled, fall within the configured parent domain.
 
 ``X-Forwarded-Host`` headers (expected to be set by ingress-nginx) are trusted for the purposes of determining the host portion of the request.
 ``Forwarded`` appears not to be supported by the NGINX ingress at present and therefore is not used.
@@ -508,9 +502,9 @@ Currently, however, the ``WWW-Authenticate`` header of a 403 error is not correc
 
 Gafaelfawr returns a 200 response code if the credentials are valid, which tells ingress-nginx to pass the request (possibly with additional headers) to the protected service.
 
-The behavior of redirecting the user to log in if they are not authenticated is implemented in ingress-nginx by configuring its response to a 401 error from the auth subrequest.
-For API services that are not used by browsers, ingress-nginx should not be configured with the ``nginx.ingress.kubernetes.io/auth-signin`` annotation (the ``config.loginRedirect`` setting of a ``GafaelfawrIngress``).
-In this case, it will return the 401 challenge to the client instead of redirecting.
+Optionally, the user can be redirected to log in if they are not authenticated.
+This is done via the ``nginx.ingress.kubernetes.io/auth-signin`` annotation, controlled with the ``config.loginRedirect`` setting of a ``GafaelfawrIngress``.
+If this annotation is present, NGINX responds to a 401 error from an auth subrequest handler by redirecting the user rather than returning that error to the user.
 
 When authenticating a request with a token, Gafaelfawr does not care what type of token is presented.
 It may be a user, notebook, internal, or service token; all of them are handled the same way.
@@ -629,18 +623,21 @@ In detail:
    This endpoint accepts tokens of type ``internal`` as well as ``oidc`` for reasons explained in :ref:`cadc`.
 
 In order to use the OpenID Connect authentication flow, a service has to pre-register a client ID, secret, and return URL.
-The list of valid client IDs, secrets, and return URLs for a given deployment are stored as a JSON blob in the Gafaelfawr secret.
-Gafaelfawr will only allow authentication if the ``redirect_uri`` parameter matches the registered return URL for the requesting client.
-The OpenID Connect relying party must then present that same client ID, secret, and ``redirect_uri`` as part of the request to redeem a code for a token.
+This is done via a REST API rooted at ``/auth/api/v1/oidc-clients``.
+When a new client is registered, Gafaelfawr generates a random client ID and a random secret, stores the client information and a hashed version of the password in the Gafaelfawr database, and returns the unhashed password along with the client ID to the caller.
+The OpenID Connect relying party must then present that same client ID and secret as part of the request to redeem a code for a token.
+Each subsequent OpenID Connect request from a client is authenticated against the database by hashing the provided password and comparing it to the stored hash.
+
+Gafaelfawr will only allow authentication if the ``redirect_uri`` parameter set when registering the client matches the registered return URL for the requesting client.
 
 This is the OpenID Connect authorization code flow.
-See the `OpenID Connect specification <https://openid.net/specs/openid-connect-core-1_0.html>`__ for more information.
+See the `OpenID Connect specification <https://openid.net/specs/openid-connect-core-1_0.html>`__ for more details.
 This implementation has the following protocol limitations:
 
 .. rst-class:: compact
 
 - Only the ``authorization_code`` grant type is supported, and only the ``code`` response type is supported.
-- Only the ``client_secret_post`` token authentication method is supported.
+- Only the ``client_secret_basic`` and ``client_secret_post`` token authentication methods are supported.
 - Only ``GET`` requests to the authorization endpoint are supported.
 - Most optional features of the OpenID Connect protocol are not yet supported.
 - Scopes and claim requests or restrictions are not supported in the userinfo endpoint.
@@ -666,7 +663,7 @@ For more details about the OpenID Connect authentication flow and its intended u
 Specific services
 =================
 
-The general pattern for protecting a service with authentication and access control is configure its ``Ingress`` resources with the necessary ingress-nginx annotations and then let Gafaelfawr do the work.
+The general pattern for protecting a service with authentication and access control is configure its ``Ingress`` resources with the necessary ingress-nginx annotations, usually via the ``GafaelfawrIngress`` custom resource, and then let Gafaelfawr do the work.
 If the service needs information about the user, it obtains that from the ``X-Auth-Request-*`` headers that are set by Gafaelfawr via ingress-nginx, or by requesting a delegated token and then using the token API to retrieve details about the token or the user's identity information.
 
 If the service requests a delegated token, that token will be present in the ``X-Auth-Request-Token`` header of the request as passed to the service.
@@ -687,7 +684,6 @@ JupyterHub then acts as an OAuth authentication provider to authenticate the use
 The lab obtains an OAuth token for the user from the hub and uses that for subsequent authentication to the lab.
 
 The JupyterHub authentication session can include state, which is stored in the JupyterHub session database.
-In the current Science Platform implementation, that session database is stored in a PostgreSQL server also run inside the same Kubernetes cluster, protected by password authentication with a password injected into the JupyterHub pod.
 The data stored in the authentication session is additionally encrypted with a key known only to JupyterHub.
 
 The ingress for JupyterHub is configured to require Gafaelfawr authentication and access control for all JupyterHub and lab URLs.
@@ -880,8 +876,9 @@ Gafaelfawr storage is divided into two, sometimes three, backend stores: a SQL d
 Redis is used for the token itself, including the authentication secret.
 It contains enough information to verify the authentication of a request and return the user's identity.
 The SQL database stores metadata about a user's tokens, including the list of currently valid tokens, their relationships to each other, and a history of where they have been used from.
+The SQL database also stores the registered OpenID Connect clients and their hashed passwords.
 
-If the user's identity information doesn't come from LDAP, Redis also stores the identity information.
+If the user's identity information doesn't come from LDAP, such as for tokens created by services for bot users, Redis also stores the identity information.
 Redis is also used to store rate limiting information and temporary data when acting as an OpenID Connect authentication provider.
 
 .. _token-format:
@@ -929,7 +926,7 @@ The value is an encrypted JSON document with the following keys:
 - **expires**: When the token expires (in seconds since epoch)
 
 In addition, if user identity information does not come from LDAP, the following keys store identity information associated with this token.
-This information comes from OpenID Connect claims or from GitHub queries for information about the user.
+This information comes from GitHub queries for information about the user or from information provided by an API client creating a service token for a bot user.
 
 .. rst-class:: compact
 
@@ -947,11 +944,9 @@ In other words, Gafaelfawr uses any data stored with the token in Redis by prefe
 If LDAP is not configured and no source of that data was found, that data element is empty, is not included in API responses, and is not set in the relevant HTTP header (if any).
 For UID and GID, this is generally an error, except for synthetic users and service tokens that are only used in contexts where no POSIX file system access is done and thus UID and GID are not necessary.
 
-In CILogon and COmanage deployments, none of these fields are set during token creation.
+In OpenID Connect deployments, including CILogon and COmanage deployments, none of these fields are set during token creation.
 All data comes from Firestore or LDAP.
 In GitHub deployments, all of these fields are set (if the data is available; in the case of name and email, it may not be).
-In OpenID Connect deployments, whether a field is set depends on whether that field is configured to come from LDAP or Firestore, or to come from the OpenID Connect token claims.
-In the latter case, the information is stored with the token.
 Child tokens and user tokens created from a token with user identity information will have that identity information copied into the data stored for the newly-created token in Redis.
 
 Tokens created via the admin token API may have these fields set, in which case the values set via the admin token API are stored in Redis and thus override any values in LDAP, even if LDAP is configured.
@@ -1008,7 +1003,7 @@ Cloud SQL is used wherever possible, via the `Cloud SQL Auth proxy`_.
 The proxy runs as a sidecar container in the main Gafaelfawr pods so that the proxy scales with instances of the web service.
 Other Gafaelfawr pods (the Kubernetes operator, maintenance pods) use a shared instance of the proxy running as a stand-alone service that is only accessible to pods in the ``gafaelfawr`` namespace.
 
-For deployments outside of :abbr:`GCS (Google Cloud Services)`, an in-cluster PostgreSQL server deployed as part of the Science Platform is used instead.
+For deployments outside of :abbr:`GCS (Google Cloud Services)`, an infrastructure PostgreSQL server is used instead.
 
 Authentication to the SQL server, whether the proxy is used or not, is via a password injected as a Kubernetes secret into the Gafaelfawr pods.
 
@@ -1020,8 +1015,7 @@ The SQL database stores the following data:
    Any identity data stored with the token is stored only in Redis, not in the SQL database.
 #. Parent-child relationships between the tokens.
 #. History of changes (creation, revocation, expiration, modification) to tokens, including who made the change and the IP address from which it was made.
-#. List of authentication administrators, who automatically get the ``admin:token`` scope when they authenticate via a browser;
-#. History of changes to admins, including who made the change and the IP address from which it was made.
+#. Registered OpenID Connect clients, including their hashed passwords.
 
 Critically, the token secret is not stored in the SQL database, only in Redis.
 A token therefore cannot be recreated from the SQL database.
@@ -1125,11 +1119,9 @@ Bootstrapping
 -------------
 
 Gafaelfawr provides a command-line utility to bootstrap a new installation of the token management system by creating the necessary database schema.
-To bootstrap administrative access, this step adds a configured list of usernames to the SQL database as admins.
-These administrators can then use the API or web interface to add additional administrators.
 
 Gafaelfawr's configuration may also include a bootstrap token.
-This token will have unlimited access to the API routes ``/auth/api/v1/admins`` and ``/auth/api/v1/tokens`` and thus can configure the administrators and create service and user tokens with any scope and any identity.
+This token will have unlimited access to the API routes under ``/auth/api/v1/oidc-clients`` and ``/auth/api/v1/tokens``, and thus can register OpenID Connect clients and create service and user tokens with any scope and any identity.
 
 Actions performed via the bootstrap token are logged with the special username ``<bootstrap>``, which is otherwise an invalid username.
 
@@ -1318,7 +1310,7 @@ Generated API documentation is available as part of the `Gafaelfawr documentatio
 .. _FastAPI: https://fastapi.tiangolo.com/
 .. _OpenAPI: https://www.openapis.org/
 
-There are four general classes of routes in the API:
+There are five general classes of routes in the API:
 
 #. Routes to retrieve information about a token or its associated user.
    These are normally used by services via delegated internal tokens to get user information, such as UID, GID, group membership, full name, or email address.
@@ -1332,6 +1324,9 @@ There are four general classes of routes in the API:
    This is only supported when using LDAP as the user information source.
    It is needed by some applications that do not have an easy way to get a delegated token for the user, such as provisioning resources for newly-created groups or processing requests for a user that were sent via a message bus that should not receive user tokens.
    These routes require the ``admin:userinfo`` scope.
+
+#. Routes for admins to register and manage OpenID Connect clients.
+   These routes require the ``admin:oidc`` scope.
 
 #. Routes for admins to manage and retrieve history for all tokens and to create tokens for arbitrary users, including bot users representing services.
    These routes allow arbitrary impersonation of users and should therefore only be accessible to a small number of trusted admins.
@@ -1377,7 +1372,7 @@ Pagination
 ----------
 
 Pagination is only used for history queries, since they may return a large number of records.
-Users are not expected to have enough active tokens to require pagination for token lists.
+Users are not expected to have enough active tokens to require pagination for token lists, and installations are not expected to have enough OpenID Connect clients to need pagination.
 
 To avoid the known problems with offset/limit pagination, such as missed entries when moving between pages, pagination for all APIs that require it is done via cursors.
 For the history tables, there is a unique ID for each row and a timestamp.
@@ -1426,6 +1421,7 @@ Token UI
 
 Gafaelfawr itself only provides a REST API for tokens.
 The user interface that interprets that data and provides users an easy way to view, revoke, and create tokens is part of Squareone_, the landing page and top-level user interface for the Science Platform.
+Squareone also provides an admin UI to the admin REST API for users with appropriate admin scopes.
 
 IVOA GMS API
 ============
@@ -1443,7 +1439,7 @@ Quota
 Gafaelfawr calculates quota for each user from its configuration and from any temporary quota overrides created via its REST API.
 Dynamically-configured quota overrides are stored in the persistent Redis.
 
-For all of the implementation details, see :sqr:`073`.
+For the implementation details, see :sqr:`073`.
 
 .. _rate-limiting:
 
@@ -1451,7 +1447,7 @@ Rate limiting
 -------------
 
 Gafaelfawr directly enforces API rate limits, if any are configured, by counting the requests to a service that pass thorugh its ingress authentication route (see :ref:`ingress-integration`).
-The data tracking is done using the Python limits_ library using 15-minute fixed windows.
+The data tracking is done using the Python limits_ library using one minute fixed windows.
 Tracking data is stored in the ephemeral Redis instance.
 
 .. _limits: https://limits.readthedocs.io/en/stable/
@@ -1609,6 +1605,9 @@ Other implementation tech notes are:
 
 :sqr:`073`
     Design and implementation details for user quotas and API rate limiting.
+
+:sqr:`111`
+    Possible approaches for migration to the new Kubernetes Gateway API, replacing Ingress and ingress-nginx.
 
 Operations
 ----------
